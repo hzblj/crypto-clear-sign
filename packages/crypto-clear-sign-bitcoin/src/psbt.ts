@@ -37,7 +37,7 @@ import {concatBytes, decodeBase64, decodeUtf8, instructions, isOpReturn} from '.
 import {BITCOIN_TEXTS, BITCOIN_WARNINGS} from './catalogs'
 import {chainRef, symbolOf} from './chain'
 import {describeRunestone} from './describe-runes'
-import type {BitcoinClearSignChain, BitcoinClearSignOptions} from './options'
+import type {BitcoinClearSignChain, BitcoinClearSignOptions, BitcoinCoinAssets} from './options'
 import {createOwnership, type Ownership} from './ownership'
 import {decipher} from './runes'
 import {
@@ -179,6 +179,12 @@ const dataField = (script: Uint8Array): Field | undefined => {
  * times, and what the user's accounts give and get. The intent is "Send 0.01 BTC to bc1q…", a consolidation, a
  * transfer to yourself, or "Sign part of a transaction" when other wallets' coins are spent too.
  *
+ * A PSBT whose outputs ask for more than its inputs hold is unfinished: an offer, as a marketplace listing is (the
+ * seller's coin and its price at the same index, signed SIGHASH_SINGLE|ANYONECANPAY, waiting for a buyer's inputs). Its
+ * intent is `bitcoin.intent.offer` ("Offer 0.0001 BTC for 0.001 BTC"), with what the signer gives (`yourCoins`, and
+ * the `inscriptions` and `runes` its coins hold), what it asks in return (`inReturn`: its own outputs its signatures
+ * fix) and what is left for others to fund (`unfunded`). It has no fee yet, so none is shown or judged.
+ *
  * `psbt` is the PSBT's bytes, or Base64 text. Throws `ClearSignError`: `INVALID_INPUT` when the adapter refuses it
  * (its error is the `cause`), `INVALID_ARGUMENT` for an option out of range. Anything it reads but cannot place (an
  * output with no address, a malformed runestone) is a warning, never an error.
@@ -260,6 +266,26 @@ export const clearSignPsbt = async (
   const own = outputs.filter(isOwn)
   const sent = sum(payments.map(({output}) => output.value))
   const kept = sum(own.map(({output}) => output.value))
+  const signing = inputs.filter(input => input.signs)
+
+  // Outputs that ask for more than the inputs hold: an unfinished transaction, an offer waiting for others' inputs (a
+  // marketplace listing: the seller's coin, signed SINGLE|ANYONECANPAY, and the price at its index).
+  const unfinished = decoded.balance !== undefined && decoded.balance < 0n
+
+  // What the signer's signatures ask in return: an output of its own paired with its input under SINGLE (the price of
+  // a listing, finished or not); in an unfinished transaction, also its outputs an ALL signature fixes and, without
+  // accounts to tell whose an output is, every SINGLE pair.
+  const fixesAll = signing.some(({sighash}) => sighash.fixes === 'all')
+  const paired = new Set(signing.flatMap(({index, sighash}) => (sighash.fixes === 'same' ? [index] : [])))
+  const asked = new Set(
+    outputs
+      .filter(output =>
+        isOwn(output)
+          ? paired.has(output.index) || (unfinished && fixesAll)
+          : unfinished && !ownership.known && paired.has(output.index)
+      )
+      .map(({index}) => index)
+  )
   const byAddress = new Map<string, number[]>()
 
   for (const {index, output} of outputs) {
@@ -384,6 +410,16 @@ export const clearSignPsbt = async (
     ]
     const source = {decoder: 'psbt', kind: 'builtin'} as const
 
+    if (asked.has(index) && (role === 'change' || role === 'self')) {
+      return {
+        fields,
+        intent: BITCOIN_TEXTS.intent.receive,
+        source,
+        summary: text(BITCOIN_TEXTS.summary.receive, {amount: btc(value)}),
+        warnings,
+      }
+    }
+
     switch (role) {
       case 'change':
         return {
@@ -494,12 +530,32 @@ export const clearSignPsbt = async (
   const mine = inputs.filter(input => input.owner.own)
   const foreign = ownership.known ? inputs.filter(input => !input.owner.own) : []
 
-  if (sent > 0n) {
+  // An unfinished transaction's payments are a draft others complete: what is sent is not the signer's to say.
+  if (sent > 0n && !unfinished) {
     fields.push(bitcoin({id: 'amount', label: LABELS.amount, value: sent}))
   }
 
-  // With others' coins in it, what the user's accounts put in and get back is what this signature costs them.
-  if (foreign.length > 0 && mine.length > 0) {
+  // An offer: what the signer gives (its coins, and what they hold), what it asks in return, and what others still
+  // have to put in.
+  const offer = unfinished && signing.length > 0 ? offerOf(signing, assets.coins, outputs, asked) : undefined
+
+  if (offer !== undefined) {
+    fields.push(bitcoin({id: 'yourCoins', label: LABEL.yourCoins, value: offer.given}))
+
+    if (offer.inscriptions > 0) {
+      fields.push(numberField({id: 'inscriptions', label: LABEL.inscriptions, value: offer.inscriptions}))
+    }
+
+    if (offer.runes > 0) {
+      fields.push(numberField({id: 'runes', label: LABEL.runes, value: offer.runes}))
+    }
+
+    fields.push(
+      bitcoin({id: 'inReturn', label: LABEL.inReturn, value: offer.asked}),
+      bitcoin({id: 'unfunded', label: LABEL.unfunded, secondary: true, value: -(decoded.balance ?? 0n)})
+    )
+  } else if (foreign.length > 0 && mine.length > 0 && !unfinished) {
+    // With others' coins in it, what the user's accounts put in and get back is what this signature costs them.
     const values = mine.map(({input}) => input.spent?.value)
 
     if (values.every(value => value !== undefined)) {
@@ -603,7 +659,6 @@ export const clearSignPsbt = async (
   }
 
   // A SegWit v0 signature commits to its own coin's value only; a Taproot one without ANYONECANPAY to every input's.
-  const signing = inputs.filter(input => input.signs)
   const committed = signing.some(input => input.taproot && input.sighash.commitsToInputs)
   const unverified = signing.filter(({input, taproot}) => input.spent !== undefined && !input.verifiedValue && !taproot)
 
@@ -617,13 +672,17 @@ export const clearSignPsbt = async (
   // its fee is not this one's, and it is part of a transaction rather than the whole.
   const open = signing.some(input => !input.sighash.commitsToAll)
 
-  // The fee.
+  // The fee: none yet while the transaction is unfinished, and nothing to judge.
   if (fee === undefined) {
-    warnings.push(
-      warning(BITCOIN_WARNINGS.UNKNOWN_FEE, {
-        fields: inputs.filter(({input}) => input.spent === undefined).map(({index}) => `input-${index}`),
-      })
-    )
+    if (unfinished) {
+      // Every coin's value is known: the outputs ask for more. Others' inputs, still to come, make the fee.
+    } else {
+      warnings.push(
+        warning(BITCOIN_WARNINGS.UNKNOWN_FEE, {
+          fields: inputs.filter(({input}) => input.spent === undefined).map(({index}) => `input-${index}`),
+        })
+      )
+    }
   } else {
     const base = sent > 0n ? sent : kept
     const high =
@@ -687,7 +746,9 @@ export const clearSignPsbt = async (
     inputs,
     kept,
     mine,
+    offer,
     open,
+    outputs,
     own,
     ownership,
     payments,
@@ -706,6 +767,28 @@ export const clearSignPsbt = async (
   })
 }
 
+type Offer = {
+  /** The signer's coins in it. */
+  readonly given: bigint
+  /** The inscriptions and rune balances those coins hold, by the `assets` option. */
+  readonly inscriptions: number
+  readonly runes: number
+  /** What the outputs it asks for pay. */
+  readonly asked: bigint
+}
+
+const offerOf = (
+  signing: readonly Input[],
+  coins: readonly (BitcoinCoinAssets | undefined)[],
+  outputs: readonly Output[],
+  asked: ReadonlySet<number>
+): Offer => ({
+  asked: sum(outputs.filter(({index}) => asked.has(index)).map(({output}) => output.value)),
+  given: sum(signing.map(({input}) => input.spent?.value ?? 0n)),
+  inscriptions: signing.reduce((count, {index}) => count + (coins[index]?.inscriptions?.length ?? 0), 0),
+  runes: signing.reduce((count, {index}) => count + (coins[index]?.runes?.length ?? 0), 0),
+})
+
 /** What the whole does, when one thing does dominate. */
 const rootIntent = ({
   actions,
@@ -715,7 +798,9 @@ const rootIntent = ({
   inputs,
   kept,
   mine,
+  offer,
   open,
+  outputs,
   own,
   ownership,
   payments,
@@ -728,20 +813,37 @@ const rootIntent = ({
   readonly inputs: readonly Input[]
   readonly kept: bigint
   readonly mine: readonly Input[]
+  readonly offer: Offer | undefined
   readonly open: boolean
+  readonly outputs: readonly Output[]
   readonly own: readonly Output[]
   readonly ownership: {readonly known: boolean}
   readonly payments: readonly Output[]
   readonly sent: bigint
 }): [DisplayText, DisplayText | undefined] => {
-  if ((ownership.known && mine.length === 0) || foreign.length > 0 || open) {
-    return [
-      BITCOIN_TEXTS.intent.signPart,
-      text(BITCOIN_TEXTS.summary.signPart, {
-        count: ownership.known ? mine.length : inputs.length,
-        total: inputs.length,
-      }),
-    ]
+  const part: [DisplayText, DisplayText] = [
+    BITCOIN_TEXTS.intent.signPart,
+    text(BITCOIN_TEXTS.summary.signPart, {count: ownership.known ? mine.length : inputs.length, total: inputs.length}),
+  ]
+
+  if (ownership.known && mine.length === 0) {
+    return part
+  }
+
+  if (offer !== undefined) {
+    const params = {asked: btc(offer.asked), given: btc(offer.given)}
+    const summary =
+      offer.asked === 0n
+        ? text(BITCOIN_TEXTS.summary.offerNothing, {given: params.given})
+        : offer.inscriptions + offer.runes > 0
+          ? text(BITCOIN_TEXTS.summary.offerAssets, params)
+          : text(BITCOIN_TEXTS.summary.offer, params)
+
+    return [BITCOIN_TEXTS.intent.offer, summary]
+  }
+
+  if (foreign.length > 0 || open) {
+    return part
   }
 
   const [payment] = payments

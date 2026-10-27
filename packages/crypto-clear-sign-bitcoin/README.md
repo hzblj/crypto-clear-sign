@@ -69,8 +69,8 @@ Warnings:
 The payload is the PSBT's bytes, or its Base64 text. The result's `kind` is `psbt`:
 
 - **The root** says what the whole does: "Send 0.00025 BTC to bc1q…" (or "to 3 recipients"), a consolidation ("Combine
-  3 coins into 0.00059 BTC"), a transfer to yourself, a rune's etching or mint, or **"Sign part of a transaction"**
-  when other wallets' coins are spent too, or when the signer's own signature leaves the transaction open
+  3 coins into 0.00059 BTC"), a transfer to yourself, a rune's etching or mint, an **offer** (a PSBT that is not
+  finished, below), or **"Sign part of a transaction"** when other wallets' coins are spent too, or when the signer's own signature leaves the transaction open
   (NONE, SINGLE, ANYONECANPAY): others complete it. Its fields are the amount sent to others (`amount`), with others'
   coins in it what the signer's accounts put in, get back and pay (`yourCoins`, `backToYou`, `net`), the fee (`fee`),
   the fee rate (`feeRate`, sat/vB), an absolute lock time (`lockTime`), every input as a list (`input-0`, …), and,
@@ -84,7 +84,9 @@ The payload is the PSBT's bytes, or its Base64 text. The result's `kind` is `psb
 - **Each output is an action**, in order (`result.actions[i]` is output `#i`): a payment (`intent.send`, the
   recipient `to` and the `amount`), **change** (`bitcoin.intent.change`, `to` with `relation: 'self'`), a transfer to
   yourself (`bitcoin.intent.selfTransfer`: the signer's receiving address, or one the names resolver calls `own`),
-  `OP_RETURN` data (`data`, as text when it reads as text), a runestone, or a script with no address (raw).
+  what the signer asks in return (`bitcoin.intent.receive`: its own output paired with its input under SINGLE, a
+  listing's price), `OP_RETURN` data (`data`, as text when it reads as text), a runestone, or a script with no address
+  (raw).
 - **The fee** is exact; the fee rate divides it by the size: the signed transaction's when every input is signed
   and the adapter finalizes it, else an estimate from the inputs' scripts as the adapter makes its own (68 vB a
   P2WPKH input, 57.5 a Taproot key path, 148 P2PKH, 91 P2SH-P2WPKH) and the outputs' exact sizes. An input of
@@ -107,6 +109,31 @@ output is a payment, and the review says so (`UNKNOWN_DESTINATION` on each).
 A Taproot input of the signer's that signs without ANYONECANPAY commits to every coin's value (BIP-341), so a PSBT
 lying about a P2WPKH coin's value makes it invalid; without one, a P2WPKH coin's value is checked only by its previous
 transaction (`PSBT_IN_NON_WITNESS_UTXO`), and `bitcoin.UNVERIFIED_VALUES` says when it is missing.
+
+### Offers: PSBTs that are not finished
+
+A PSBT whose outputs ask for more than its inputs hold cannot be broadcast as it is: others add their inputs. That is
+how a marketplace listing looks, the seller's coin and its price at the same index, signed SINGLE|ANYONECANPAY for a
+buyer to complete. The adapter (0.3.1 or later) reads one with a negative `balance` and no fee, and the review says
+what the signer offers:
+
+- **The intent** is `bitcoin.intent.offer`: "Offer 0.0001 BTC for 0.001 BTC", "Offer 0.0001 BTC and the inscriptions
+  or runes it holds for 0.001 BTC" when the `assets` option says its coins hold some, or "Offer 0.0001 BTC for nothing
+  in return".
+- **What the signer gives:** its coins (`yourCoins`), and the inscriptions and runes they hold (`inscriptions`,
+  `runes`).
+- **What it asks in return** (`inReturn`): its own outputs its signatures fix, the output paired with an input under
+  SINGLE and every one under ALL, each a `bitcoin.intent.receive` action. A paired output that pays someone else asks
+  nothing; without accounts the paired output counts, whoever it pays.
+- **What is left for others to fund** (`unfunded`): the outputs less the inputs.
+- **No fee:** none is shown and none is judged (no `fee`, `feeRate`, `HIGH_FEE` or `bitcoin.UNKNOWN_FEE`), and no
+  `amount` sent: the other outputs are a draft the buyer completes. The size is the draft's estimate.
+
+Its warnings are its signatures' (`bitcoin.SIGHASH_SINGLE_ANYONECANPAY` for a listing) and, for a coin holding an
+inscription or runes, `ASSET_OWNERSHIP_TRANSFER`: whoever completes the transaction decides where they go. Once a buyer
+has added inputs, the PSBT is a shared transaction like any other ("Sign part of a transaction", with its fee), and the
+seller's price is still `bitcoin.intent.receive`. When none of the inputs is the signer's (a buyer looking at the
+listing), it is "Sign part of a transaction" with `bitcoin.NO_OWN_INPUTS`.
 
 ### Inscriptions and runes
 
@@ -151,7 +178,8 @@ base units and `UNKNOWN_TOKEN`. Runes an edict or the pointer sends to an `OP_RE
 `HIGH_FEE` (medium) when the fee rate is above `maxFeeRate` (500 sat/vB), the fee above `maxFee` (1,000,000 sats,
 0.01 BTC), or the fee is above 10,000 sats and more than `maxFeePercent` (10) percent of what is sent to others (of
 what moves, when nothing is). The floor keeps dust-sized payments, such as an inscription's 546-sat postage, from
-being judged by their share. A signature that leaves the transaction open is not judged: its fee is a draft's.
+being judged by their share. A signature that leaves the transaction open is not judged: its fee is a draft's. An
+offer has no fee yet, so nothing is judged.
 
 An absolute lock time binds when an input's sequence is not final: by height below 500,000,000 (judged against
 `tipHeight` when the app gives it), else a Unix time (judged by the clock). Ahead of now it is `bitcoin.TIMELOCKED`
@@ -208,7 +236,7 @@ Amounts are `BTC` on mainnet and `tBTC` on every test network, 8 decimals, base 
 
 | Decoder (`source.decoder`) | Reads | Intent, fields, warnings |
 | --- | --- | --- |
-| `psbt` | The PSBT (the root) and each output with an address | `intent.send`, `bitcoin.intent.change`, `bitcoin.intent.selfTransfer`, `bitcoin.intent.consolidate`, `bitcoin.intent.signPart`; inputs, outputs, fee, locks |
+| `psbt` | The PSBT (the root) and each output with an address | `intent.send`, `bitcoin.intent.change`, `bitcoin.intent.selfTransfer`, `bitcoin.intent.receive`, `bitcoin.intent.consolidate`, `bitcoin.intent.offer`, `bitcoin.intent.signPart`; inputs, outputs, fee, locks, what an offer gives and asks |
 | `op-return` | `OP_RETURN` data that is not a runestone | `bitcoin.intent.data` (`bitcoin.intent.burn` with bitcoin in it); `data` as text or raw |
 | `runestone` | The first `OP_RETURN OP_13` output | `bitcoin.intent.runestone`, `bitcoin.intent.etchRune`, `bitcoin.intent.mintRune`; etching, mint, edicts, pointer; `bitcoin.CENOTAPH`, `bitcoin.RUNES_BURNED`, `UNKNOWN_TOKEN` |
 | `bip322`, `bip137` | A message's text | `intent.signMessage`; `HIDDEN_CHARACTERS`, `BLIND_SIGNING` (hex) |
@@ -262,9 +290,9 @@ the fee and locks) and its fields (`input-1-sighash`, `to`, `edict-0`).
 ## Texts
 
 Its own, in `BITCOIN_TEXTS`: intents `bitcoin.intent.burn`, `change`, `consolidate`, `data`, `etchRune`, `mintRune`,
-`runestone`, `selfTransfer`, `signPart`, `unknownScript`; summaries of the same names and `bitcoin.summary.cenotaph`,
-`sendMany`; labels from `bitcoin.label.allOutputs` to `bitcoin.label.youReceive` (inputs, fee rate, sizes, lock times,
-runestone fields, sign-in extras); units `bitcoin.unit.blocks`, `satPerVbyte`, `vbytes`. Shared ones it uses:
+`offer`, `receive`, `runestone`, `selfTransfer`, `signPart`, `unknownScript`; summaries of the same names and
+`bitcoin.summary.cenotaph`, `offerAssets`, `offerNothing`, `sendMany`; labels from `bitcoin.label.allOutputs` to
+`bitcoin.label.youReceive` (inputs, fee rate, sizes, lock times, offers, runestone fields, sign-in extras); units `bitcoin.unit.blocks`, `satPerVbyte`, `vbytes`. Shared ones it uses:
 `intent.send`, `intent.signMessage`, `intent.signIn`, `intent.unknown`; `summary.send`, `summary.signMessage`,
 `summary.signIn`, `summary.blind`; `label.amount`, `fee`, `to`, `from`, `data`, `message`, `account`, `domain`,
 `statement`, `uri`, `network`, `nonce`, `issuedAt`, `expiry`, `notBefore`.
@@ -291,8 +319,8 @@ script with no address does, which runes and inscriptions a coin holds (the app'
 fingerprint-only account's change is really the user's. Change is verified only against extended keys or single
 addresses. See [SECURITY.md](https://github.com/hzblj/crypto-clear-sign/blob/main/SECURITY.md).
 
-Errors (`ClearSignError`): `INVALID_INPUT` for what the adapter refuses (its error is the `cause`; a PSBT version 2,
-and a PSBT whose outputs are more than its inputs, are among them), `CHAIN_MISMATCH` for a message address of another
+Errors (`ClearSignError`): `INVALID_INPUT` for what the adapter refuses (its error is the `cause`; a PSBT version 2
+is among them), `CHAIN_MISMATCH` for a message address of another
 network or a sign-in message for another chain, `INVALID_ARGUMENT` for an option out of range.
 
 **Not in this version:** PSBT version 2 (the adapter reads version 0), Taproot script paths and their leaves (an

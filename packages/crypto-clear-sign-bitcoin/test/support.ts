@@ -115,6 +115,14 @@ const concat = (...parts: Uint8Array[]) => {
   return out
 }
 
+/**
+ * A private key for btc-signer to sign with (31 zero bytes, then `n`): no wallet of the engine's, so the accounts that
+ * own its coins are named by script.
+ */
+export const privateKey = (n: number) => Uint8Array.from({length: 32}, (_, index) => (index === 31 ? n : 0))
+
+export const sum = (values: readonly bigint[]) => values.reduce((total, value) => total + value, 0n)
+
 export const toHex = (bytes: Uint8Array) => Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 
 export const fromHex = (text: string) => Uint8Array.from(text.match(/../g) ?? [], byte => Number.parseInt(byte, 16))

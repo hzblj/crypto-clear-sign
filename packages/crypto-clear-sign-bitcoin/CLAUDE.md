@@ -5,7 +5,7 @@ sign-in), read through the chain client of `@hzblj/crypto-bitcoin` into `@hzblj/
 The README is the reference (every field id, code and decoder); [`docs/chain-package-contract.md`](../../docs/chain-package-contract.md)
 is the shape every chain package keeps.
 
-TypeScript over `@hzblj/crypto-clear-sign` (`workspace:^`) and `@hzblj/crypto-bitcoin` (a **dependency**, `^0.3.0`,
+TypeScript over `@hzblj/crypto-clear-sign` (`workspace:^`) and `@hzblj/crypto-bitcoin` (a **dependency**, `^0.3.1`,
 as crypto-airgap's chain packages have it, not a peer as the contract suggests). `@hzblj/nitro-crypto` is a peer (one
 engine per app; the app makes the client) and is imported only from `@hzblj/nitro-crypto/adapter`, whose entry loads
 no native module. `@scure/btc-signer` (pinned) is a devDependency: an independent writer of the test PSBTs.
@@ -13,7 +13,7 @@ no native module. `@scure/btc-signer` (pinned) is a devDependency: an independen
 | Path | What it is |
 | --- | --- |
 | `src/index.ts` | The exports: `clearSignPsbt`, `clearSignMessage`, `BITCOIN_WARNINGS`, `BITCOIN_TEXTS`, `BITCOIN_CHAIN_IDS`, the `HIGH_FEE` defaults, the types. Pinned by `test/package.test.ts`. |
-| `src/psbt.ts` | `clearSignPsbt`: inputs as root list fields, outputs as actions, the fee, locks, ownership and asset warnings, the root intent. |
+| `src/psbt.ts` | `clearSignPsbt`: inputs as root list fields, outputs as actions, the fee, locks, ownership and asset warnings, offers (a negative `balance`: what the signer gives and asks), the root intent. |
 | `src/ownership.ts` | Accounts (one address, an xpub account, a fingerprint) against a script and its PSBT derivations: own, verified, branch, false claims. |
 | `src/transaction.ts` | Sighash readings, size estimates (or the finalized size), BIP-68 relative locks, BIP-125, lock time rules. |
 | `src/runes.ts` | The runestone decoder, ord's `runestone.rs` line for line (varints, tags, edicts, flaws), rune names, where runes go. |
@@ -23,7 +23,7 @@ no native module. `@scure/btc-signer` (pinned) is a devDependency: an independen
 | `src/chain.ts` | CAIP-2 ids (`testnet` option: testnet4 by default), names, BTC or tBTC. |
 | `src/catalogs.ts` | `BITCOIN_WARNINGS`, `BITCOIN_TEXTS`, `BitcoinWarningCode`. |
 | `src/bytes.ts` | Strict Base64, hex, UTF-8, script instructions (for `OP_RETURN` and runestones only: the adapter parses everything else). |
-| `test/` | node:test via tsx on `createTestCryptoEngine` (WebAssembly). `support.ts` builds PSBTs with the adapter and with btc-signer (`btcSignerPsbt`), and runestone scripts. `runes.test.ts` carries ord's test cases; `hostile.test.ts` is the seeded fuzz. `consumer.ts` is what `yarn pack:check` type-checks against the tarball. |
+| `test/` | node:test via tsx on `createTestCryptoEngine` (WebAssembly). `support.ts` builds PSBTs with the adapter and with btc-signer (`btcSignerPsbt`), and runestone scripts. `runes.test.ts` carries ord's test cases; `offer.test.ts` signs and completes a listing with btc-signer's keys (`privateKey`); `hostile.test.ts` is the seeded fuzz. `consumer.ts` is what `yarn pack:check` type-checks against the tarball. |
 
 ## Rules
 
@@ -52,8 +52,9 @@ no native module. `@scure/btc-signer` (pinned) is a devDependency: an independen
 ## Asked of the adapter (`@hzblj/crypto-bitcoin`)
 
 - Export its size estimate (`estimateVsize`, per input type): `src/transaction.ts` repeats its numbers.
-- `decodePsbt` refuses a PSBT whose outputs are more than its inputs, which is how marketplace listings
-  (SIGHASH_SINGLE|ANYONECANPAY offers) are shaped: a fee of `undefined` there would let them be reviewed.
 - Final witnesses (or their sizes) in `decodePsbt`, for an exact size of a partly finalized PSBT.
+
+Done in 0.3.1: `decodePsbt` reads a PSBT whose outputs exceed its inputs (a negative `balance`, no `fee`), so
+marketplace offers are reviewed (`bitcoin.intent.offer`) instead of refused.
 
 Docs copy has no em dashes.

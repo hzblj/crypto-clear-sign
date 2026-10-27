@@ -43,6 +43,12 @@ export type SighashReading = {
   readonly commitsToAll: boolean
   /** Whether it commits to every input's value (no ANYONECANPAY): what makes a Taproot signature check them all. */
   readonly commitsToInputs: boolean
+  /**
+   * The outputs it fixes: every one (ALL, DEFAULT, ALL|ANYONECANPAY), the one at its input's index (SINGLE, with or
+   * without ANYONECANPAY), or none (NONE, SINGLE past the outputs, and a type outside the standard ones, which is
+   * taken to promise nothing).
+   */
+  readonly fixes: 'all' | 'same' | 'none'
   readonly warning?: {
     readonly definition: WarningDefinition<WarningCode>
     readonly params: Readonly<Record<string, number | string>>
@@ -66,12 +72,14 @@ export const readSighash = (
       commitsToAll: true,
       commitsToInputs: true,
       explicit: type !== undefined,
+      fixes: 'all',
       name: NAMES[type ?? (taproot ? SIGHASH_DEFAULT : SIGHASH_ALL)] ?? 'ALL',
     }
   }
 
   const name = NAMES[type] ?? `0x${type.toString(16).padStart(2, '0')}`
-  const base = {commitsToAll: false, commitsToInputs: (type & ANYONECANPAY) === 0, explicit: true, name}
+  const commitsToInputs = (type & ANYONECANPAY) === 0
+  const base = {commitsToAll: false, commitsToInputs, explicit: true, fixes: 'none' as const, name}
   const unusual = {...base, warning: {definition: BITCOIN_WARNINGS.UNUSUAL_SIGHASH, params: {input, type: name}}}
 
   if (NAMES[type] === undefined || type === SIGHASH_DEFAULT) {
@@ -87,14 +95,19 @@ export const readSighash = (
     case SIGHASH_NONE | ANYONECANPAY:
       return {...base, warning: {definition: BITCOIN_WARNINGS.SIGHASH_NONE, params: {input}}}
     case SIGHASH_SINGLE:
-      return {...base, warning: {definition: BITCOIN_WARNINGS.SIGHASH_SINGLE, params: {input, output: input}}}
+      return {
+        ...base,
+        fixes: 'same',
+        warning: {definition: BITCOIN_WARNINGS.SIGHASH_SINGLE, params: {input, output: input}},
+      }
     case SIGHASH_SINGLE | ANYONECANPAY:
       return {
         ...base,
+        fixes: 'same',
         warning: {definition: BITCOIN_WARNINGS.SIGHASH_SINGLE_ANYONECANPAY, params: {input, output: input}},
       }
     default:
-      return {...base, warning: {definition: BITCOIN_WARNINGS.SIGHASH_ANYONECANPAY, params: {input}}}
+      return {...base, fixes: 'all', warning: {definition: BITCOIN_WARNINGS.SIGHASH_ANYONECANPAY, params: {input}}}
   }
 }
 
