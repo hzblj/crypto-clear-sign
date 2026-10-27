@@ -5007,7 +5007,7 @@ __metadata:
   dependencies:
     "@babel/core": "npm:^7.29.7"
     "@expo/ui": "npm:~57.0.26"
-    "@hzblj/crypto-bitcoin": "npm:^0.3.0"
+    "@hzblj/crypto-bitcoin": "npm:^0.3.1"
     "@hzblj/crypto-clear-sign": "workspace:*"
     "@hzblj/crypto-clear-sign-bitcoin": "workspace:*"
     "@hzblj/crypto-clear-sign-ethereum": "workspace:*"
