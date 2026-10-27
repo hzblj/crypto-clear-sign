@@ -1,6 +1,6 @@
 {
   "name": "@hzblj/crypto-clear-sign-bitcoin",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Bitcoin clear signing for @hzblj/crypto-clear-sign: PSBTs (P2WPKH and Taproot) and messages, read through the chain client of @hzblj/crypto-bitcoin into the shared display model. No UI.",
   "author": "Jan Blazej",
   "license": "MIT",
