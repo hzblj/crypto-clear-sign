@@ -1,3 +1,20 @@
-// Ethereum clear signing: `clearSignTransaction`, `clearSignTypedData`, `clearSignMessage` go here, as docs/chain-package-contract.md says, each taking the
-// chain client (`EthereumChain`) and the core's `ClearSignOptions`, and returning the core's `ClearSigning`.
+export {type AuthorizationInput, clearSignAuthorization} from './authorization'
+export {ETHEREUM_TEXTS, ETHEREUM_WARNINGS, type EthereumWarningCode} from './catalogs'
+export {
+  type EthereumClearSignChain,
+  type EthereumClearSignOptions,
+  type EthereumDescriptorQuery,
+  type NativeCurrency,
+} from './env'
+export {
+  createDescriptorResolver,
+  type Erc7730File,
+  type Erc7730Resolver,
+  mergeDescriptors,
+} from './erc7730/resolver'
+export type {Erc7730Descriptor} from './erc7730/types'
+export {ETHEREUM_TOKENS, type EthereumToken, MULTICALL3, PERMIT2} from './known'
+export {clearSignMessage} from './message'
+export {clearSignTransaction} from './transaction'
+export {clearSignTypedData} from './typed-data'
 export {VERSION} from './version'

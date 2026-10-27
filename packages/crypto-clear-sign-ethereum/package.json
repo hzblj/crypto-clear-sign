@@ -35,6 +35,11 @@
       "types": "./build/index.d.ts",
       "default": "./build/index.js"
     },
+    "./registry": {
+      "source": "./src/registry/index.ts",
+      "types": "./build/registry/index.d.ts",
+      "default": "./build/registry/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -51,18 +56,18 @@
     "test": "node --conditions=source --import tsx --test 'test/**/*.test.ts'"
   },
   "dependencies": {
-    "@hzblj/crypto-clear-sign": "workspace:^"
+    "@hzblj/crypto-clear-sign": "workspace:^",
+    "@hzblj/crypto-ethereum": "^0.3.0"
   },
   "peerDependencies": {
-    "@hzblj/crypto-ethereum": "^0.3.0",
     "@hzblj/nitro-crypto": "^0.1.5"
   },
   "devDependencies": {
-    "@hzblj/crypto-ethereum": "^0.3.0",
     "@hzblj/nitro-crypto": "^0.1.5",
     "@types/node": "^22.19.0",
     "tsx": "^4.23.15",
-    "typescript": "~7.0.2"
+    "typescript": "~7.0.2",
+    "viem": "2.57.11"
   },
   "publishConfig": {
     "access": "public",
@@ -70,6 +75,10 @@
       ".": {
         "types": "./build/index.d.ts",
         "default": "./build/index.js"
+      },
+      "./registry": {
+        "types": "./build/registry/index.d.ts",
+        "default": "./build/registry/index.js"
       },
       "./package.json": "./package.json"
     },

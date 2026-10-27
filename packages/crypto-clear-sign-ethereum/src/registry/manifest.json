@@ -1,0 +1,260 @@
+{
+  "commit": "b70998caa5dab184243a298a0253b5530428b0f2",
+  "files": [
+    {
+      "path": "ercs/calldata-erc4626-vaults.json",
+      "role": "include",
+      "sha256": "3d31a6edd14c50e5b014f279e2ff4283d81e994e4b566af21000d1cff19e4390"
+    },
+    {
+      "path": "registry/1inch/calldata-AggregationRouterV5.json",
+      "role": "descriptor",
+      "sha256": "f5ee0773696fa4a635d84a3e3a25b32f08bd4a34daed44266d4fccbca690be49"
+    },
+    {
+      "path": "registry/1inch/calldata-AggregationRouterV6.json",
+      "role": "descriptor",
+      "sha256": "0c469dd75542c6abe680812eaa8238b64854dcaca091a59c217f5b52083eaced"
+    },
+    {
+      "path": "registry/1inch/common-AggregationRouterV6.json",
+      "role": "include",
+      "sha256": "a354ced35cd61ec140e9b40f41dae03efa26f5590c7ef6c84788b2717438c964"
+    },
+    {
+      "path": "registry/1inch/eip712-1inch-limit-order.json",
+      "role": "descriptor",
+      "sha256": "1040372969cd98333fcc1a4a00aacc14129f4637487e87c7b059e2cd5a0d4877"
+    },
+    {
+      "path": "registry/aave/calldata-lpv3.json",
+      "role": "descriptor",
+      "sha256": "371cff3a83da6f5beb93bc3d280e4b6bdbcf26caf59a51968f03e9ce85c828c3"
+    },
+    {
+      "path": "registry/aave/calldata-WrappedTokenGatewayV3.json",
+      "role": "descriptor",
+      "sha256": "fcea4ed287f2b2dedc12c2778937a35c13fce2b20b8bf23edbf14ba390990667"
+    },
+    {
+      "path": "registry/circle/calldata-TokenMessengerV2.json",
+      "role": "descriptor",
+      "sha256": "070072df1f20536bde597e8d3f0d86cad8d09eaa1fdabf9d3bbb6eb1a05e6ff6"
+    },
+    {
+      "path": "registry/circle/eip712-ReceiveWithAuthorization.json",
+      "role": "descriptor",
+      "sha256": "4205d06ed2456ef909b50a11333f885d17ff438f8dc06624482befd41b7f10e9"
+    },
+    {
+      "path": "registry/circle/eip712-TransferWithAuthorization.json",
+      "role": "descriptor",
+      "sha256": "a8fc0a3f28130fb15d05632a23cb7f7f6df91b8142d76acc264d3eb3114a5ab9"
+    },
+    {
+      "path": "registry/ethena/calldata-ethena.json",
+      "role": "descriptor",
+      "sha256": "da12844aa9f109e6f8f3e0579239d9deaf34b7aaf4ec33496f7ac41588a89830"
+    },
+    {
+      "path": "registry/kyberswap/calldata-MetaAggregationRouterV2.json",
+      "role": "descriptor",
+      "sha256": "e392d2c97d8ce6e666b490c451ac5bd27e24c7767d73971cc83bc38f94ac0073"
+    },
+    {
+      "path": "registry/lido/calldata-stETH.json",
+      "role": "descriptor",
+      "sha256": "7a64a2bc5b17b4ecdea4b4b5ebd024b0d5858e30ed0afd15b8a9898f61d81317"
+    },
+    {
+      "path": "registry/lido/calldata-WithdrawalQueueERC721.json",
+      "role": "descriptor",
+      "sha256": "546d16aeda2e4d7bf029b45897e1232fc48dc9a149e330f134c41e2e05a10ec6"
+    },
+    {
+      "path": "registry/lido/calldata-wstETH.json",
+      "role": "descriptor",
+      "sha256": "a5fe1954ebc04c6f236e237566d374c474368a5346446a23a1cca6171026378b"
+    },
+    {
+      "path": "registry/lifi/calldata-LIFIDiamond.json",
+      "role": "descriptor",
+      "sha256": "557a3c02b033c959d5cd49f9aaef8ef7dd79017a34c084799ee433816688a825"
+    },
+    {
+      "path": "registry/morpho/calldata-MorphoBlue.json",
+      "role": "descriptor",
+      "sha256": "17512d31da4ab09d2732537f0316d3d1d99f125cb6be28a3ad38c9d37b75208b"
+    },
+    {
+      "path": "registry/paraswap/calldata-AugustusSwapper-v6.2.json",
+      "role": "descriptor",
+      "sha256": "2fafde157eb7a668dc990cede170c59d54da840308d0fed3f130962c8d399c5e"
+    },
+    {
+      "path": "registry/safe/calldata-Safe-1.4.1.json",
+      "role": "descriptor",
+      "sha256": "39cb7b692f99603a09803f4b3a0a2b88ad0ee350320a9beeadffe43068585775"
+    },
+    {
+      "path": "registry/safe/calldata-SafeToL2Setup-1.4.1.json",
+      "role": "descriptor",
+      "sha256": "7fd9874afb86c826631fd7612def21cb6a5e2e7da1393fa3556f2daccc0510fc"
+    },
+    {
+      "path": "registry/safe/common-eip712-Safe.json",
+      "role": "include",
+      "sha256": "a075ee527f15df4a2c13ab5b9313af887ac9b470aba8b309109027dc55645429"
+    },
+    {
+      "path": "registry/safe/common-Safe.json",
+      "role": "include",
+      "sha256": "354793337c021f674f4f510fedfe3b922a63d8435983c8449d0ab6ee5e9d7d4b"
+    },
+    {
+      "path": "registry/safe/common-SafeToL2Setup.json",
+      "role": "include",
+      "sha256": "45ef74c60ace880372968e7e72c7132b03126e3ced6629b2d59f1f61626e2ab4"
+    },
+    {
+      "path": "registry/safe/eip712-Safe-1.4.1.json",
+      "role": "descriptor",
+      "sha256": "93b5d3df64a92607367e0faa4562d596ccd4b6a930b0e332306fe396657f5584"
+    },
+    {
+      "path": "registry/sky/calldata-sUSDS.json",
+      "role": "descriptor",
+      "sha256": "1f03aa2dc6fa2b9e7593cfbf948154accc3b12219dcf6be2ed7a52e2adcfea9f"
+    },
+    {
+      "path": "registry/tether/calldata-usdt.json",
+      "role": "descriptor",
+      "sha256": "f8512038c6944e78050035acb5a43e9cbc92dd2cc103d527c7fe2dd769c337af"
+    },
+    {
+      "path": "registry/uniswap/calldata-UniswapV2Router02.json",
+      "role": "descriptor",
+      "sha256": "e3c6d05a79a58dd7352442771eaec418eb4fa4b3c39ab697e5b16f65a90c5685"
+    },
+    {
+      "path": "registry/uniswap/calldata-UniswapV3Router02.json",
+      "role": "descriptor",
+      "sha256": "a6cda94cdd059458f3262fb24aafdb0251ecd6055e62248c4ad3aa4efa167434"
+    },
+    {
+      "path": "registry/uniswap/common-eip712-uniswap.json",
+      "role": "include",
+      "sha256": "d19927939c74530ffd5583ea3dd3e4d9b8154daaae9ac4916df11454b29bb2fd"
+    },
+    {
+      "path": "registry/uniswap/eip712-uniswap-permit2.json",
+      "role": "descriptor",
+      "sha256": "9a31a5381f88d6478f06208126df82bafead52f27e40a156c4c71f5f8099a05e"
+    },
+    {
+      "path": "registry/weth/calldata-weth.json",
+      "role": "descriptor",
+      "sha256": "ac899b0b8b09ea9b3d19ea068124288fabcb74ab08681eaa491bcf109cd0464d"
+    }
+  ],
+  "license": "CC0-1.0",
+  "repository": "https://github.com/LedgerHQ/clear-signing-erc7730-registry",
+  "tests": [
+    {
+      "path": "registry/1inch/testsv2/calldata-AggregationRouterV5.tests.json",
+      "sha256": "f02b76e198f001658d2e016d2d0858ed28c0be307a72f7e87e65d9c293c46804"
+    },
+    {
+      "path": "registry/1inch/testsv2/calldata-AggregationRouterV6.tests.json",
+      "sha256": "ab07b3b7fffcb323c4f697f958207d43d332a8dc58c9a69f39914ada12e4bd54"
+    },
+    {
+      "path": "registry/1inch/testsv2/eip712-1inch-limit-order.tests.json",
+      "sha256": "f948f3afcb200c21115779725f7ba19e29e2ba39876e1087733a2705e0e4ab42"
+    },
+    {
+      "path": "registry/aave/testsv2/calldata-lpv3.tests.json",
+      "sha256": "15a7cc441c0ba34bd35a35d8356d915e11156689dbd1f6e9c3ac3c19f4345e8e"
+    },
+    {
+      "path": "registry/aave/testsv2/calldata-WrappedTokenGatewayV3.tests.json",
+      "sha256": "a1404486fd9394eccd628f2d7593282c0d483777570872cc5904416587e907e6"
+    },
+    {
+      "path": "registry/circle/testsv2/calldata-TokenMessengerV2.tests.json",
+      "sha256": "c5d3aca70df6499ae6398c0710ec1079ab068f95823b2d54b40e7ae795ea9193"
+    },
+    {
+      "path": "registry/circle/testsv2/eip712-ReceiveWithAuthorization.tests.json",
+      "sha256": "f72826686f5bcaf6d0c5e31ca4b5995b19b16b7a8db881c2386eb8c79198fbc9"
+    },
+    {
+      "path": "registry/circle/testsv2/eip712-TransferWithAuthorization.tests.json",
+      "sha256": "1fdf1f77677c712c03c4e4e6cce3df05789bb98d3889cb257c52d28cba282c0d"
+    },
+    {
+      "path": "registry/ethena/testsv2/calldata-ethena.tests.json",
+      "sha256": "1d3ac9ca0afd2ec0b64cb1119b091e6166cae8af9f2c9d8b2e00ab448f0327b4"
+    },
+    {
+      "path": "registry/kyberswap/testsv2/calldata-MetaAggregationRouterV2.tests.json",
+      "sha256": "1e09ce20245c77c2018b311e50287dc27e03e8273feb849fe735312e31b20bc0"
+    },
+    {
+      "path": "registry/lido/testsv2/calldata-stETH.tests.json",
+      "sha256": "0f477ecd8b5eace96b264887eee02c79071d0ea4874e6c75f9ec27c8565890b2"
+    },
+    {
+      "path": "registry/lido/testsv2/calldata-WithdrawalQueueERC721.tests.json",
+      "sha256": "e4c2ef29cc6a101a79e3ab0b5557d8f07cf96b7c9f26ba99f16bae223b3d791f"
+    },
+    {
+      "path": "registry/lido/testsv2/calldata-wstETH.tests.json",
+      "sha256": "85712d33446db0f6ac1b16c1215ec2731dd575934aba83d9fbfe6577dfae29f9"
+    },
+    {
+      "path": "registry/lifi/testsv2/calldata-LIFIDiamond.tests.json",
+      "sha256": "4f034911f0a49daf20b6ac99eeb6e3233dac435648f229e33276c4a9db65973c"
+    },
+    {
+      "path": "registry/morpho/testsv2/calldata-MorphoBlue.tests.json",
+      "sha256": "57bbcf536909e3113ef47813d68b2cc19c8000842a0aecf12aae26da1ffafa4d"
+    },
+    {
+      "path": "registry/paraswap/testsv2/calldata-AugustusSwapper-v6.2.tests.json",
+      "sha256": "23bf5660aef158bbb2545590120e6bdeae878bf315ef31b5c06a3222dcbffb5d"
+    },
+    {
+      "path": "registry/safe/testsv2/calldata-Safe-1.4.1.tests.json",
+      "sha256": "a7aed046a0fdc0a3846e64ba72de7f913a24f5d32016ee0b565bd48ac6c0b350"
+    },
+    {
+      "path": "registry/safe/testsv2/eip712-Safe-1.4.1.tests.json",
+      "sha256": "3492fc3ae0c02eefbc12751634b210f5d81fae63ac71e2fb1d1844b909b3d8e4"
+    },
+    {
+      "path": "registry/sky/testsv2/calldata-sUSDS.tests.json",
+      "sha256": "0e7f7acb57911419cdb4d0db4f662be9d0ad6fd9c14ae1f312180957fb6ec004"
+    },
+    {
+      "path": "registry/tether/testsv2/calldata-usdt.tests.json",
+      "sha256": "9ade02745bf75c7c15b397c8b6b5493dcb200a1b09ed02cafac0a5ebc043b39f"
+    },
+    {
+      "path": "registry/uniswap/testsv2/calldata-UniswapV2Router02.tests.json",
+      "sha256": "be0b711cbb2e6d41fbf94745de4759c3b02cdbf00c04a2671775f274c235218e"
+    },
+    {
+      "path": "registry/uniswap/testsv2/calldata-UniswapV3Router02.tests.json",
+      "sha256": "e60e9ebe2fbf151997f1174b020140b9f28ec4b299ce1b9014ad8fb8318b5843"
+    },
+    {
+      "path": "registry/uniswap/testsv2/eip712-uniswap-permit2.tests.json",
+      "sha256": "6c13c50c50fa5a3fc81f4609fc8a42ca4e7c7036284ede9e8519e23367daccc8"
+    },
+    {
+      "path": "registry/weth/testsv2/calldata-weth.tests.json",
+      "sha256": "44419d30f612759e7d3fe0a0e8f9cc18e40530602bfe0af443880ce6874b9552"
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "../../specs/erc7730-v2.schema.json",
+  "context": {
+    "eip712": {
+      "deployments": [
+        { "chainId": 1, "address": "0x119c71d3bbac22029622cbaec24854d3d32d2828" },
+        { "chainId": 10, "address": "0x11431a89893025d2a48dca4eddc396f8c8117187" },
+        { "chainId": 56, "address": "0x1e38eff998df9d3669e32f4ff400031385bf6362" },
+        { "chainId": 137, "address": "0x94bc2a1c732bcad7343b25af48385fe76e08734f" },
+        { "chainId": 42161, "address": "0x7f069df72b7a39bce9806e3afaf579e54d8cf2b9" }
+      ],
+      "domain": { "name": "1inch Limit Order Protocol", "version": "2" }
+    }
+  },
+  "metadata": { "owner": "1inch Limit Order Protocol" },
+  "display": {
+    "formats": {
+      "Order(uint256 salt,address makerAsset,address takerAsset,address maker,address receiver,address allowedSender,uint256 makingAmount,uint256 takingAmount,bytes makerAssetData,bytes takerAssetData,bytes getMakerAmount,bytes getTakerAmount,bytes predicate,bytes permit,bytes interaction)": {
+        "intent": "1inch Order",
+        "fields": [
+          {
+            "path": "maker",
+            "label": "From",
+            "format": "addressName",
+            "params": { "types": ["eoa", "contract"] },
+            "visible": "always"
+          },
+          {
+            "path": "makingAmount",
+            "label": "Send",
+            "format": "tokenAmount",
+            "params": { "tokenPath": "makerAsset" },
+            "visible": "always"
+          },
+          {
+            "path": "takingAmount",
+            "label": "Receive minimum",
+            "format": "tokenAmount",
+            "params": { "tokenPath": "takerAsset" },
+            "visible": "always"
+          },
+          {
+            "path": "receiver",
+            "label": "To",
+            "format": "addressName",
+            "params": { "types": ["eoa", "contract"], "senderAddress": ["0x0000000000000000000000000000000000000000"] },
+            "visible": "always"
+          },
+          {
+            "path": "allowedSender",
+            "label": "Allowed sender",
+            "format": "addressName",
+            "params": { "types": ["eoa", "contract"] },
+            "visible": "always"
+          },
+          { "path": "makerAssetData", "label": "Maker asset data", "format": "raw", "visible": "always" },
+          { "path": "takerAssetData", "label": "Taker asset data", "format": "raw", "visible": "always" },
+          { "path": "getMakerAmount", "label": "Maker amount getter", "format": "raw", "visible": "always" },
+          { "path": "getTakerAmount", "label": "Taker amount getter", "format": "raw", "visible": "always" },
+          { "path": "predicate", "label": "Predicate", "format": "raw", "visible": "always" },
+          { "path": "permit", "label": "Permit", "format": "raw", "visible": "always" },
+          { "path": "interaction", "label": "Interaction", "format": "raw", "visible": "always" },
+          { "label": "Salt", "path": "salt", "visible": "never" }
+        ]
+      }
+    }
+  }
+}
