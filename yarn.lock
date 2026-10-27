@@ -564,11 +564,11 @@ __metadata:
     "@hzblj/crypto-bitcoin": "npm:^0.3.0"
     "@hzblj/crypto-clear-sign": "workspace:^"
     "@hzblj/nitro-crypto": "npm:^0.1.5"
+    "@scure/btc-signer": "npm:2.4.1"
     "@types/node": "npm:^22.19.0"
     tsx: "npm:^4.23.15"
     typescript: "npm:~7.0.2"
   peerDependencies:
-    "@hzblj/crypto-bitcoin": ^0.3.0
     "@hzblj/nitro-crypto": ^0.1.5
   languageName: unknown
   linkType: soft
@@ -702,6 +702,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@noble/curves@npm:2.4.0":
+  version: 2.4.0
+  resolution: "@noble/curves@npm:2.4.0"
+  dependencies:
+    "@noble/hashes": "npm:2.4.0"
+  checksum: 10c0/b60b737f65cc4e128dd94fea467df1ed73c5c0c089ef1bdb61614a0897db1fa7151d7f95bb7205854a9030d3f80a879e00f3bb74990befde061184ae43dfaec6
+  languageName: node
+  linkType: hard
+
+"@noble/hashes@npm:2.4.0":
+  version: 2.4.0
+  resolution: "@noble/hashes@npm:2.4.0"
+  checksum: 10c0/f5820a38c52886073a69722a030688ad188bbacb822d01554545371259961c2b916266c57c013c2ce5a0d78aec977142fc68fd2a79be4c97b0644fcee9bb35f6
+  languageName: node
+  linkType: hard
+
 "@nodelib/fs.scandir@npm:2.1.5":
   version: 2.1.5
   resolution: "@nodelib/fs.scandir@npm:2.1.5"
@@ -726,6 +742,25 @@ __metadata:
     "@nodelib/fs.scandir": "npm:2.1.5"
     fastq: "npm:^1.6.0"
   checksum: 10c0/db9de047c3bb9b51f9335a7bb46f4fcfb6829fb628318c12115fbaf7d369bfce71c15b103d1fc3b464812d936220ee9bc1c8f762d032c9f6be9acc99249095b1
+  languageName: node
+  linkType: hard
+
+"@scure/base@npm:2.4.0":
+  version: 2.4.0
+  resolution: "@scure/base@npm:2.4.0"
+  checksum: 10c0/985a4bdcafa4289e0cb8b6d53453347308d5ff6ffcbe84d8fac102374fb419b52db565e98fa3931b79a4be1cc3218583065bbca27dfaabca687aac0f3db3639d
+  languageName: node
+  linkType: hard
+
+"@scure/btc-signer@npm:2.4.1":
+  version: 2.4.1
+  resolution: "@scure/btc-signer@npm:2.4.1"
+  dependencies:
+    "@noble/curves": "npm:2.4.0"
+    "@noble/hashes": "npm:2.4.0"
+    "@scure/base": "npm:2.4.0"
+    micro-packed: "npm:0.11.1"
+  checksum: 10c0/f469e94f714bdc24ef42afd6226eceeb417d1ef36be7d0008c2c78c1fc58f40bd48b132c32dbbe408da3b5da584033791397223e48a3bbfeab671bb967fdb7ce
   languageName: node
   linkType: hard
 
@@ -1522,6 +1557,15 @@ __metadata:
   version: 1.4.1
   resolution: "merge2@npm:1.4.1"
   checksum: 10c0/254a8a4605b58f450308fc474c82ac9a094848081bf4c06778200207820e5193726dc563a0d2c16468810516a5c97d9d3ea0ca6585d23c58ccfff2403e8dbbeb
+  languageName: node
+  linkType: hard
+
+"micro-packed@npm:0.11.1":
+  version: 0.11.1
+  resolution: "micro-packed@npm:0.11.1"
+  dependencies:
+    "@scure/base": "npm:2.4.0"
+  checksum: 10c0/2927f70acfe2c4bcb3eb84a44a23e3188b04bca6cf0c72f4254f63c19ffe25b40ea9e72ef2995bb64e058dcfb94373361d264fdcc84741c84839b315190f24b6
   languageName: node
   linkType: hard
 
