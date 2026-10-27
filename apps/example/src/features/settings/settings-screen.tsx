@@ -66,7 +66,7 @@ export const SettingsScreen = () => {
         about the addresses and tokens, and the words, change.
       </Lead>
       <Section
-        caption="The address that signs on each chain: shown as You wherever it appears. The demo key is BIP-39's published test phrase. On Bitcoin, the demo key's addresses bring its account keys, so change is verified by derivation; another address is the signer alone. Change one to see sign-ins fail and change become a payment."
+        caption="The address that signs on each chain, shown as You wherever it appears. The demo key is BIP-39's published test phrase; on Bitcoin its addresses bring its account keys, so change is verified by derivation. Change one to see sign-ins refused and change become a payment. Solana refuses a transaction the signer does not sign (INVALID_ARGUMENT), and every chain refuses an address it cannot read."
         title="Signer"
       >
         {demo.status === 'ready' ? (

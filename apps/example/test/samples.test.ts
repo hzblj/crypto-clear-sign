@@ -318,6 +318,19 @@ describe('the settings', () => {
     }
   })
 
+  test('another Solana signer: a transaction it does not sign is INVALID_ARGUMENT, a sign-in for the demo key a mismatch', async () => {
+    const {accounts, env} = await demo()
+    const options = reviewOptions({...DEFAULT_SETTINGS, signers: {solana: accounts.strangers.solana}}, accounts, NOW)
+    const transfer = await runSample(sample('solana', 'sol-transfer'), env, options)
+    const signIn = await reviewed(sample('solana', 'siws'), {
+      ...DEFAULT_SETTINGS,
+      signers: {solana: accounts.strangers.solana},
+    })
+
+    assert.ok('error' in transfer && isClearSignError(transfer.error, 'INVALID_ARGUMENT'))
+    assert.deepEqual(codes(signIn.result), ['solana.SIGN_IN_ADDRESS_MISMATCH'])
+  })
+
   test('another Bitcoin signer: none of the coins are its own, and change is a payment like any other', async () => {
     const {accounts} = await demo()
     const {result} = await reviewed(sample('bitcoin', 'payment-with-change'), {

@@ -46,8 +46,10 @@ components are React Native throughout (`Box`, `RnText`, `Pressable`), so they n
 uncontrolled: a value set from outside remounts it through a `key` (`revision` in the Paste draft and in Settings).
 
 **Settings change every review.** A signer the chain cannot read (a half-typed address) makes every sample of that
-chain `INVALID_ARGUMENT`, which the gallery shows per row. On Bitcoin, one of the demo key's addresses also passes its
-account keys (`accounts`), so change is verified by derivation; another address is `signer` alone.
+chain `INVALID_ARGUMENT`, which the gallery shows per row; so does, on Solana, a transaction or off-chain message the
+signer does not sign (Bitcoin says the same with `bitcoin.NO_OWN_INPUTS`, a warning). On Bitcoin, one of the demo
+key's addresses also passes its account keys (`accounts`), so change is verified by derivation; another address is
+`signer` alone.
 
 **Main networks, no network access.** The adapters are on Ethereum mainnet (chain id 1), Solana mainnet-beta and
 Bitcoin mainnet so the registry's descriptors and the built-in token lists apply; the app fetches nothing.
