@@ -15,6 +15,6 @@ output, and "unit" when it is this repository's own tests.
 | Package | Evidence | Kind |
 | --- | --- | --- |
 | `@hzblj/crypto-clear-sign` | The model's checks, every helper and type guard, exact amounts to 255 decimals, deadlines on a fixed clock, hidden characters by class, resolvers that throw, reject and answer nonsense, and a consumer type-checked against the packed tarball. | Unit |
-| `@hzblj/crypto-clear-sign-ethereum` | Not written yet. | |
+| `@hzblj/crypto-clear-sign-ethereum` | Keccak-256 and ABI decoding against viem 2.57.11 (`keccak256`, `toFunctionSelector`, `decodeAbiParameters`, `decodeFunctionData` over random ABIs and values, and over mutated encodings); the ERC-7730 registry's own test cases (224, at the bundled commit) replayed through the bundled descriptors: 201 read as the reference formatter reads them, 22 by built-in decoders by design, 1 refused by the adapter (a broken checksum); hostile call data fuzzed. | Fixture, unit |
 | `@hzblj/crypto-clear-sign-solana` | Not written yet. | |
 | `@hzblj/crypto-clear-sign-bitcoin` | Not written yet. | |

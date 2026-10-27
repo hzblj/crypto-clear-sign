@@ -11,7 +11,7 @@ export type EthereumToken = TokenInfo & {
 /**
  * The built-in token list: the most used tokens of Ethereum mainnet and the common test tokens of Sepolia. It backs
  * the `tokens` resolver: the app's answer wins, and this list answers what the app's does not (unless
- * `builtinTokens: false`). Anything else is an unknown token, shown in base units with `UNKNOWN_TOKEN`.
+ * `builtins: false`). Anything else is an unknown token, shown in base units with `UNKNOWN_TOKEN`.
  */
 export const ETHEREUM_TOKENS: readonly EthereumToken[] = Object.freeze(
   [

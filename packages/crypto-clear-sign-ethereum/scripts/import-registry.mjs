@@ -113,7 +113,11 @@ for (const [file, role] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
   await writeFile(path.join(DESCRIPTORS, file), bytes)
   manifest.push({path: file, role, sha256: sha256(bytes)})
 
-  const test = path.posix.join(path.posix.dirname(file), 'testsv2', path.posix.basename(file).replace(/\.json$/, '.tests.json'))
+  const test = path.posix.join(
+    path.posix.dirname(file),
+    'testsv2',
+    path.posix.basename(file).replace(/\.json$/, '.tests.json')
+  )
 
   if (role === 'descriptor' && existsSync(path.join(registry, test))) {
     const testBytes = await readFile(path.join(registry, test))
@@ -138,7 +142,10 @@ const source = [
   '',
   `/** Every bundled file, descriptors and the files they include, by its path in the registry. */`,
   'export const FILES: readonly Erc7730File[] = Object.freeze([',
-  ...descriptors.map((entry, index) => `  {descriptor: ${name(index)} as Erc7730Descriptor, path: '${entry.path}', publisher: 'ERC-7730 registry'},`),
+  ...descriptors.map(
+    (entry, index) =>
+      `  {descriptor: ${name(index)} as Erc7730Descriptor, path: '${entry.path}', publisher: 'ERC-7730 registry'},`
+  ),
   '])',
   '',
 ]
@@ -150,4 +157,6 @@ if (temporary !== undefined) {
   await rm(temporary, {force: true, recursive: true})
 }
 
-console.log(`import-registry: ${manifest.length} files (${SELECTION.length} descriptors) and ${tests.length} test files at ${commit}`)
+console.log(
+  `import-registry: ${manifest.length} files (${SELECTION.length} descriptors) and ${tests.length} test files at ${commit}`
+)

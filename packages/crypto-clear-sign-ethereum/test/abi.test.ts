@@ -2,16 +2,16 @@ import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
 import {
-  type AbiParameter as ViemParameter,
   bytesToHex,
   decodeAbiParameters,
   decodeFunctionData,
   encodeAbiParameters,
   encodeFunctionData,
   hexToBytes,
-  keccak256 as viemKeccak,
   parseAbiItem,
   toFunctionSelector,
+  type AbiParameter as ViemParameter,
+  keccak256 as viemKeccak,
 } from 'viem'
 
 import {
@@ -86,7 +86,11 @@ const toViem = (type: AbiType, name?: string): ViemParameter => {
   const named = name === undefined ? {} : {name}
 
   if (type.kind === 'tuple') {
-    return {...named, components: type.components.map(component => toViem(component.type, component.name)), type: 'tuple'}
+    return {
+      ...named,
+      components: type.components.map(component => toViem(component.type, component.name)),
+      type: 'tuple',
+    }
   }
 
   if (type.kind === 'array') {
@@ -212,15 +216,26 @@ describe('signatures', () => {
 
     for (const text of cases) {
       const fn = parseFunction(text)
-      const viem = toFunctionSelector(text.replace(/\btuple\(/g, '(').replace(/\buint\b/, 'uint256').replace(/\bint\b/, 'int256'))
+      const viem = toFunctionSelector(
+        text
+          .replace(/\btuple\(/g, '(')
+          .replace(/\buint\b/, 'uint256')
+          .replace(/\bint\b/, 'int256')
+      )
       assert.equal(fn.selector, viem, text)
     }
 
     assert.equal(parseFunction('transfer(address to,uint256 value)').signature, 'transfer(address,uint256)')
-    assert.deepEqual(
-      parseFunction('f((uint8 a,bytes b)[] c)').inputs[0]?.type,
-      {item: {components: [{name: 'a', type: {bits: 8, kind: 'uint'}}, {name: 'b', type: {kind: 'bytes'}}], kind: 'tuple'}, kind: 'array'}
-    )
+    assert.deepEqual(parseFunction('f((uint8 a,bytes b)[] c)').inputs[0]?.type, {
+      item: {
+        components: [
+          {name: 'a', type: {bits: 8, kind: 'uint'}},
+          {name: 'b', type: {kind: 'bytes'}},
+        ],
+        kind: 'tuple',
+      },
+      kind: 'array',
+    })
   })
 
   test('refuses what is not a signature', () => {
@@ -244,7 +259,14 @@ describe('signatures', () => {
 
   test("a JSON ABI's functions, with their selectors; anything else skipped", () => {
     const functions = jsonFunctions([
-      {inputs: [{name: 'to', type: 'address'}, {name: 'amount', type: 'uint256'}], name: 'transfer', type: 'function'},
+      {
+        inputs: [
+          {name: 'to', type: 'address'},
+          {name: 'amount', type: 'uint256'},
+        ],
+        name: 'transfer',
+        type: 'function',
+      },
       {
         inputs: [{components: [{name: 'a', type: 'uint8'}], name: 'p', type: 'tuple[]'}],
         name: 'g',
@@ -297,8 +319,18 @@ describe('decoding, against viem', () => {
         name: `p${index}`,
         type: randomType(next, 1),
       }))
-      const fn = parseFunction(`f(${params.map(param => `${canonicalType(param.type)} ${param.name}`).join(',')})`)
-      const abi = [{inputs: params.map(param => toViem(param.type, param.name)), name: 'f', outputs: [], stateMutability: 'nonpayable', type: 'function'}] as const
+      const abi = [
+        {
+          inputs: params.map(param => toViem(param.type, param.name)),
+          name: 'f',
+          outputs: [],
+          stateMutability: 'nonpayable',
+          type: 'function',
+        },
+      ] as const
+      // Read from the same JSON ABI, so tuple components keep their names as viem's do.
+      const [fn] = jsonFunctions(abi)
+      assert.ok(fn)
       const args = params.map(param => randomValue(next, param.type))
       const data = encodeFunctionData({abi, args} as never)
       const theirs = decodeFunctionData({abi, data} as never) as {args?: readonly unknown[]}
@@ -316,7 +348,12 @@ describe('decoding, against viem', () => {
         type: randomType(next, 0),
       }))
       const viemParams = params.map(param => toViem(param.type, param.name))
-      const bytes = hexToBytes(encodeAbiParameters(viemParams, params.map(param => randomValue(next, param.type))))
+      const bytes = hexToBytes(
+        encodeAbiParameters(
+          viemParams,
+          params.map(param => randomValue(next, param.type))
+        )
+      )
 
       // Flip bytes, truncate, or write a huge word where an offset or a length may be.
       const mutation = int(next, 3)
@@ -394,7 +431,11 @@ describe('hostile call data', () => {
     assert.throws(() => decodeParameters(type('uint8'), word(256n)), AbiError)
     assert.throws(() => decodeParameters(type('int8'), word(128n)), AbiError)
     assert.throws(() => decodeParameters(type('bytes1'), word(1n)), AbiError)
-    assert.equal((decodeParameters(type('int8'), word((1n << 256n) - 128n))[0]?.value as {value: bigint}).value, -128n)
+    assert.deepEqual(decodeParameters(type('int8'), word((1n << 256n) - 128n))[0]?.value, {
+      bits: 8,
+      kind: 'int',
+      value: -128n,
+    })
   })
 
   test('offsets and lengths past the data, and arrays longer than their data, are refused at once', () => {
@@ -416,9 +457,14 @@ describe('hostile call data', () => {
     assert.ok(MAX_ABI_VALUES < Number(count * count))
   })
 
-  test('an offset that points back at itself does not loop', () => {
-    // A tuple (bytes[]) whose array offset points at the array's own head.
-    assert.throws(() => decodeParameters(type('bytes[]'), concat(word(0n), word(1n), word(0n))), AbiError)
+  test('an offset that points back at its own word reads what is there, once, and stops', () => {
+    // bytes[] whose offset is 0: the array's length is read from the offset word itself (0), and nothing loops.
+    assert.deepEqual(decodeParameters(type('bytes[]'), word(0n))[0]?.value, {items: [], kind: 'array'})
+    // An element offset of 0 points at the element's own offset word, read as the length of empty bytes.
+    assert.deepEqual(decodeParameters(type('bytes[]'), concat(word(32n), word(1n), word(0n)))[0]?.value, {
+      items: [{kind: 'bytes', value: new Uint8Array(0)}],
+      kind: 'array',
+    })
   })
 
   test('random bytes never throw anything but AbiError, whatever the types', () => {

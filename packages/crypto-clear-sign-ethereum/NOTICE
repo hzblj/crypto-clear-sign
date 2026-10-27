@@ -1,0 +1,13 @@
+@hzblj/crypto-clear-sign-ethereum
+Copyright (c) 2026 Jan Blazej, under the MIT License (see LICENSE).
+
+This package bundles ERC-7730 clear signing descriptors from the ERC-7730 registry,
+https://github.com/LedgerHQ/clear-signing-erc7730-registry, in its `/registry` entry point
+(src/registry/descriptors/, built to build/registry/descriptors/). They are copied byte for byte, at the commit and
+with the SHA-256 recorded for each file in src/registry/manifest.json, by scripts/import-registry.mjs.
+
+The registry's contents are dedicated to the public domain under CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Each descriptor names its own owner in its metadata. A descriptor describes calls and messages in words its authors
+chose; load it only if you trust the registry it comes from.

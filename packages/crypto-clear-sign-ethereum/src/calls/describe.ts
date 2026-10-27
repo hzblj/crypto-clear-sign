@@ -50,7 +50,11 @@ export const describeCall = async (env: Env, call: Call): Promise<Described> => 
       const described = await builtin.describe({args: decodeCall(builtin.fn, call.data), call, env, nested})
 
       if (described !== undefined) {
-        return withValue(env, call, {payable: builtin.payable, ...described})
+        // The decoder that read it names the source, whichever reader its function shares (changeAdmin, ownable's).
+        const source =
+          described.source.kind === 'builtin' ? {decoder: builtin.decoder, kind: 'builtin' as const} : described.source
+
+        return withValue(env, call, {payable: builtin.payable, ...described, source})
       }
     } catch (error) {
       // Arguments that do not decode, or do not read as the function says: the next reader may know better.

@@ -37,7 +37,9 @@ type Case = {
 }
 type Vectors = {
   readonly dataProvider?: {
-    readonly tokens?: Readonly<Record<string, {readonly symbol: string; readonly decimals: number; readonly name: string}>>
+    readonly tokens?: Readonly<
+      Record<string, {readonly symbol: string; readonly decimals: number; readonly name: string}>
+    >
     readonly addressNames?: Readonly<Record<string, string>>
     readonly ensNames?: Readonly<Record<string, string>>
   }

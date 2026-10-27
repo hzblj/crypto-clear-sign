@@ -744,7 +744,10 @@ const renderField = async (context: Context, node: FieldNode, prefix: Path | und
           // A constant may itself name one of the descriptor's: `"value": "$.metadata.constants.vaultTicker"`.
           const literal =
             typeof node.value === 'string' && node.value.startsWith('$.')
-              ? lookupDescriptor(context.descriptor.json, parsePath(node.value) ?? mismatch('A value names no constant.'))
+              ? lookupDescriptor(
+                  context.descriptor.json,
+                  parsePath(node.value) ?? mismatch('A value names no constant.')
+                )
               : node.value
           const value = constant(literal)
 
