@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
-import {type RiskLevel, warningsAt} from '@hzblj/crypto-clear-sign'
+import {isClearSignError, type RiskLevel, warningsAt} from '@hzblj/crypto-clear-sign'
 
-import {DEFAULT_SETTINGS} from '../src/core/options'
-import {SAMPLES, sampleOf} from '../src/core/samples'
-import {actionOf, codes, demo, field, OFFLINE, reviewed} from './support'
+import {DEFAULT_SETTINGS, reviewOptions} from '../src/core/options'
+import {runSample, SAMPLES, sampleOf} from '../src/core/samples'
+import {actionOf, codes, demo, field, NOW, OFFLINE, reviewed} from './support'
 
 type Expected = {readonly risk: RiskLevel; readonly codes: readonly string[]}
 
@@ -304,6 +304,18 @@ describe('the settings', () => {
     })
 
     assert.deepEqual(codes(result), ['ethereum.SIGN_IN_ACCOUNT_MISMATCH'])
+  })
+
+  test('a signer the chain cannot read (half typed in Settings) is INVALID_ARGUMENT, not a review', async () => {
+    const {accounts, env} = await demo()
+    const settings = {...DEFAULT_SETTINGS, signers: {bitcoin: 'bc1q', ethereum: '0x12', solana: 'abc'}}
+
+    for (const chain of ['bitcoin', 'ethereum', 'solana'] as const) {
+      const first = SAMPLES[chain][0]
+      assert.ok(first)
+      const outcome = await runSample(first, env, reviewOptions(settings, accounts, NOW))
+      assert.ok('error' in outcome && isClearSignError(outcome.error, 'INVALID_ARGUMENT'), chain)
+    }
   })
 
   test('another Bitcoin signer: none of the coins are its own, and change is a payment like any other', async () => {

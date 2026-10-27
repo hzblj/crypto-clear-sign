@@ -1,9 +1,12 @@
 import {ClearSignError} from '@hzblj/crypto-clear-sign'
+import {createIdlResolver} from '@hzblj/crypto-clear-sign-solana'
 import type {Hex, TypedDataDefinition} from '@hzblj/crypto-ethereum'
 
 import {base64Decode, base64Encode, hexDecode, hexEncode, looksLikeHex} from '../utils'
 import type {ChainId} from './chains'
-import type {ReviewKind, ReviewRequest} from './review'
+import type {ReviewContext, ReviewKind, ReviewRequest} from './review'
+import {demoVaultIdl} from './samples/solana'
+import type {SampleEnv} from './samples/types'
 
 /** What each chain's Paste tab can read, in the order it offers them. */
 export const PASTE_KINDS = {
@@ -159,3 +162,28 @@ export const pasteTextOf = (request: ReviewRequest): {readonly text: string; rea
 
   return {format: 'text', text: stringify(payload)}
 }
+
+const PAYLOAD_LABELS = {authorization: 'JSON', psbt: 'Base64', 'typed-data': 'JSON'} as const
+
+/** What was signed as a review's Raw section shows it: the text a dApp would hand over, and what kind of text. */
+export const payloadOf = (request: ReviewRequest): {readonly label: string; readonly text: string} => {
+  const {format, text} = pasteTextOf(request)
+
+  switch (request.kind) {
+    case 'message':
+      return {label: format === 'text' ? 'text' : format === 'hex' ? 'hex' : 'Base64', text}
+    case 'transaction':
+      return {label: request.chain === 'ethereum' ? 'hex' : 'Base64', text}
+    default:
+      return {label: PAYLOAD_LABELS[request.kind], text}
+  }
+}
+
+/**
+ * What a pasted request comes with: the site the user says asks (a wallet would know it from the connection), and
+ * the IDLs the app trusts, here the demo vault's.
+ */
+export const pasteContext = (env: SampleEnv, origin: string): ReviewContext => ({
+  idls: createIdlResolver([{id: 'demo-vault@0.1.0', idl: demoVaultIdl(env), publisher: 'Demo Vault'}]),
+  ...(origin.trim() === '' ? {} : {origin: origin.trim()}),
+})

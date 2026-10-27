@@ -42,12 +42,8 @@ const u32 = (value: number) => {
   return out
 }
 
-const u64 = (value: bigint) => {
-  const out = new Uint8Array(8)
-  new DataView(out.buffer).setBigUint64(0, value, true)
-
-  return out
-}
+/** Little-endian, by hand: not every JavaScript engine a phone runs has `DataView.setBigUint64`. */
+const u64 = (value: bigint) => Uint8Array.from({length: 8}, (_, index) => Number((value >> BigInt(index * 8)) & 0xffn))
 
 const compactSize = (value: number) =>
   value < 0xfd ? Uint8Array.of(value) : Uint8Array.of(0xfd, value & 0xff, value >> 8)

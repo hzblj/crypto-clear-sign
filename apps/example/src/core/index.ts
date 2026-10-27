@@ -21,7 +21,16 @@ export {
   reviewOptions,
   signerOf,
 } from './options'
-export {MESSAGE_FORMATS, type MessageFormat, PASTE_KINDS, type PasteKind, parsePaste, pasteTextOf} from './paste'
+export {
+  MESSAGE_FORMATS,
+  type MessageFormat,
+  PASTE_KINDS,
+  type PasteKind,
+  parsePaste,
+  pasteContext,
+  pasteTextOf,
+  payloadOf,
+} from './paste'
 export {
   type ReviewChain,
   type ReviewContext,

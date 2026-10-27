@@ -5,6 +5,8 @@ declare global {
     bolt: true
     'bolt-filled': true
     'check-circle-filled': true
+    'chevron-down': true
+    'chevron-right': true
     close: true
     'content-copy': true
     'content-paste': true
