@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, test, pack check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Biome
+        run: yarn biome:check
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      # The core on its own, and each chain package on @hzblj/nitro-crypto's engine compiled to WebAssembly (its
+      # `testing` entry) with that chain's adapter from npm.
+      - name: Test
+        run: yarn test
+
+      # All four packages: @hzblj/crypto-clear-sign and its -ethereum, -solana and -bitcoin packages.
+      - name: Pack check
+        run: yarn pack:check

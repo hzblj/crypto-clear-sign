@@ -1,0 +1,24 @@
+{
+  // expo/tsconfig.base's compiler options, written out: Expo arrives with the example app, and the packages type-check
+  // without it. The example may extend `expo/tsconfig.base` itself on top of this.
+  "compilerOptions": {
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "ESNext"],
+    "module": "preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    // Not the `source` condition: published packages ship one too (kara-ui's points at platform-split sources this
+    // config can't resolve). The example maps the workspace packages to their source by `paths` instead.
+    "customConditions": ["react-native"]
+  }
+}

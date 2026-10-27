@@ -1,0 +1,78 @@
+{
+  "name": "@hzblj/crypto-clear-sign-ethereum",
+  "version": "0.0.0",
+  "description": "Ethereum and EVM clear signing for @hzblj/crypto-clear-sign: transactions of every type, EIP-712 typed data and personal messages, read through the chain client of @hzblj/crypto-ethereum into the shared display model, with ERC-7730 descriptors from a resolver. No UI.",
+  "author": "Jan Blazej",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hzblj/crypto-clear-sign.git",
+    "directory": "packages/crypto-clear-sign-ethereum"
+  },
+  "bugs": {
+    "url": "https://github.com/hzblj/crypto-clear-sign/issues"
+  },
+  "homepage": "https://github.com/hzblj/crypto-clear-sign/tree/main/packages/crypto-clear-sign-ethereum#readme",
+  "keywords": [
+    "blind-signing",
+    "clear-signing",
+    "eip-712",
+    "eip-7702",
+    "erc-20",
+    "erc-7730",
+    "ethereum",
+    "evm",
+    "hardware-wallet",
+    "react-native",
+    "wallet"
+  ],
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "rm -rf build && tsc -p ./tsconfig.build.json",
+    "clean": "rm -rf build",
+    "prepack": "yarn run -T turbo run build --filter=$npm_package_name...",
+    "lint": "yarn run -T concurrently \"yarn biome:check\" \"yarn tsc:check\"",
+    "lint:fix": "yarn run -T biome check --write .",
+    "biome:check": "yarn run -T biome check .",
+    "tsc:check": "tsc -p ./tsconfig.json",
+    "test": "node --conditions=source --import tsx --test 'test/**/*.test.ts'"
+  },
+  "dependencies": {
+    "@hzblj/crypto-clear-sign": "workspace:^"
+  },
+  "peerDependencies": {
+    "@hzblj/crypto-ethereum": "^0.3.0",
+    "@hzblj/nitro-crypto": "^0.1.5"
+  },
+  "devDependencies": {
+    "@hzblj/crypto-ethereum": "^0.3.0",
+    "@hzblj/nitro-crypto": "^0.1.5",
+    "@types/node": "^22.19.0",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./build/index.d.ts",
+        "default": "./build/index.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}
