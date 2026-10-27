@@ -367,6 +367,11 @@ describe('clearSignMessage: off-chain messages', () => {
 
   test('version 0 in extended UTF-8: text past what a hardware wallet shows, its hidden characters warned about', async () => {
     const applicationDomain = address(80)
+    const short = await sign(
+      chain.encodeOffchainMessage({applicationDomain, signers: [WALLET], text: 'Ünïcödé', version: 0})
+    )
+    assert.equal(field(short, 'format', 'text').value, 'limited-utf8')
+
     const long = `${'Terms. '.repeat(200)}Ünïcödé`
     const plain = await sign(
       chain.encodeOffchainMessage({applicationDomain, signers: [WALLET], text: long, version: 0})

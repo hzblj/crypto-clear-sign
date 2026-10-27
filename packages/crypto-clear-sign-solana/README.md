@@ -75,8 +75,9 @@ which `HIGH_FEE` is raised; `HIGH_PRIORITY_FEE`, 0.01 SOL, unless given), and `b
 built-in token list off).
 
 **Errors.** `INVALID_INPUT` when the adapter cannot read the bytes (its error is the `cause`), `UNSUPPORTED` for a
-message version after v0, `INVALID_ARGUMENT` for an option out of range, lookup tables given as an option that do not
-hold what the message loads, or a `signer` that is not one of the transaction's signers. Solana transactions do not
+message version after v0, `INVALID_ARGUMENT` for an option out of range, lookup tables given as an option that are
+not tables (an object of at most 256 addresses each) or do not hold what the message loads, or a `signer` that is not
+one of the transaction's signers. Tables given that the message does not load are not used. Solana transactions do not
 name a cluster, so there is no `CHAIN_MISMATCH`.
 
 ## Messages
@@ -109,8 +110,9 @@ each once. Its checks:
 - the expiration time: `EXPIRED` once past, `LONG_LIVED` past 30 days. The issue time and "not before" are shown,
   never "expired".
 
-Text that starts as one and breaks the format (fields out of order or twice, a time that is not RFC 3339, a version
-other than 1, a line that belongs to nothing) is plain text with `solana.SIGN_IN_MALFORMED`. Without `origin` the
+Text that starts as one and breaks the format (a domain with user info, which would show one site and be another's,
+fields out of order or twice, a time that is not RFC 3339, a version other than 1, a line that belongs to nothing) is
+plain text with `solana.SIGN_IN_MALFORMED`. Without `origin` the
 domain is shown, not checked. `INVALID_INPUT` for an off-chain message the adapter refuses, `INVALID_ARGUMENT` for a
 `signer` an off-chain message does not name.
 
@@ -123,15 +125,15 @@ last byte; data a decoder cannot read (cut short, an unknown tag, bytes left ove
 
 | `decoder` | Program | Instructions | Intents and warnings |
 | --- | --- | --- | --- |
-| `system-program` | System | `transfer`, `transferWithSeed`, `createAccount`, `createAccountWithSeed`, `createAccountAllowPrefund`, `assign`, `assignWithSeed`, `allocate`, `allocateWithSeed`, the nonce instructions (`advance`, `withdraw`, `initialize`, `authorize`, `upgrade`) | `intent.send` with `UNKNOWN_DESTINATION`; `assign` of the user's account to another program and `authorizeNonce` to someone else are `ASSET_OWNERSHIP_TRANSFER` |
-| `spl-token`, `spl-token-2022` | Token and Token-2022 | `transfer`, `transferChecked`, `approve`, `approveChecked`, `revoke`, `setAuthority`, `mintTo(Checked)`, `burn(Checked)`, `closeAccount`, `freezeAccount`, `thawAccount`, `syncNative`, `initializeMint(2)`, `initializeAccount(2, 3)`, `initializeMultisig(2)`, `getAccountDataSize`, `initializeImmutableOwner`, `amountToUiAmount`, `uiAmountToAmount`, `withdrawExcessLamports`, `unwrapLamports`, and `batch` (each of its instructions a nested action) | `intent.send` (`UNKNOWN_DESTINATION`, `UNKNOWN_TOKEN`), `intent.approve` (`UNLIMITED_APPROVAL` at the largest `u64`), `intent.transferOwnership` (`ASSET_OWNERSHIP_TRANSFER`), `solana.CLOSE_TO_OTHER` |
+| `system-program` | System | `transfer`, `transferWithSeed`, `createAccount`, `createAccountWithSeed`, `createAccountAllowPrefund`, `assign`, `assignWithSeed`, `allocate`, `allocateWithSeed`, the nonce instructions (`advance`, `withdraw`, `initialize`, `authorize`, `upgrade`) | `intent.send` with `UNKNOWN_DESTINATION`; `createAccountAllowPrefund` without a payer (an account already funded) sends nothing; `assign` of the user's account to another program and `authorizeNonce` to someone else are `ASSET_OWNERSHIP_TRANSFER` |
+| `spl-token`, `spl-token-2022` | Token and Token-2022 | `transfer`, `transferChecked`, `approve`, `approveChecked`, `revoke`, `setAuthority`, `mintTo(Checked)`, `burn(Checked)`, `closeAccount`, `freezeAccount`, `thawAccount`, `syncNative`, `initializeMint(2)`, `initializeAccount(2, 3)`, `initializeMultisig(2)`, `getAccountDataSize`, `initializeImmutableOwner`, `amountToUiAmount`, `uiAmountToAmount`, `withdrawExcessLamports`, `unwrapLamports`, and `batch` (each of its instructions a nested action; one the program refuses, a batch in it or accounts left over, is raw) | `intent.send` (`UNKNOWN_DESTINATION`, `UNKNOWN_TOKEN`), `intent.approve` (`UNLIMITED_APPROVAL` at the largest `u64`), `intent.transferOwnership` (`ASSET_OWNERSHIP_TRANSFER`), `solana.CLOSE_TO_OTHER` |
 | `spl-token-2022` | Token-2022's extensions | `transferCheckedWithFee`; the mint close authority, transfer fee config and `setTransferFee`, withheld fee withdrawal and harvest, default account state, `reallocate`, memo transfers, native mint, non-transferable mint, interest-bearing mint, CPI guard, permanent delegate, transfer hook, metadata, group and group member pointers, scaled UI amount, pausable, permissioned burn | `solana.intent.configureToken` with what is set; confidential transfers, token metadata and token group instructions are not read |
 | `associated-token-account` | Associated Token Account | `create`, `createIdempotent`, `recoverNested` | `solana.intent.createTokenAccount` |
 | `compute-budget` | Compute Budget | `setComputeUnitLimit`, `setComputeUnitPrice`, `requestHeapFrame`, `setLoadedAccountsDataSizeLimit` | The priority fee at the root, `HIGH_FEE` |
 | `memo` | Memo (v1, v3 and v4) | The note | `HIDDEN_CHARACTERS` |
-| `stake-program` | Stake | `initialize(Checked)`, `delegateStake`, `deactivate`, `withdraw`, `split`, `merge`, `moveStake`, `moveLamports`, `authorize(Checked)` | `authorize` to someone else is `ASSET_OWNERSHIP_TRANSFER`; `withdraw` to a stranger `UNKNOWN_DESTINATION`. The sysvars the program's older layouts pass are skipped, so both layouts read. |
+| `stake-program` | Stake | `initialize(Checked)`, `delegateStake`, `deactivate`, `withdraw`, `split`, `merge`, `moveStake`, `moveLamports`, `authorize(Checked)` | `authorize` to someone else is `ASSET_OWNERSHIP_TRANSFER`; `withdraw` to a stranger `UNKNOWN_DESTINATION`. The sysvars the program's older layouts pass are skipped, so both layouts read; one loaded from a lookup table that was not given is skipped by its position (signers are never looked up, so it cannot be the authority). |
 | `address-lookup-table` | Address Lookup Table | `create`, `extend`, `freeze`, `deactivate`, `close` | `close` to a stranger is `solana.CLOSE_TO_OTHER` |
-| `bpf-upgradeable-loader` | BPF Upgradeable Loader | `initializeBuffer`, `write`, `deployWithMaxDataLen`, `upgrade`, `setAuthority(Checked)`, `close`, `extendProgram` | `upgrade` is `solana.PROGRAM_UPGRADE`; `setAuthority` to someone else `ASSET_OWNERSHIP_TRANSFER`, to no one `solana.intent.makeImmutable` |
+| `bpf-upgradeable-loader` | BPF Upgradeable Loader | `initializeBuffer`, `write`, `deployWithMaxDataLen`, `upgrade`, `setAuthority(Checked)`, `close`, `extendProgram` | `upgrade` is `solana.PROGRAM_UPGRADE`; `setAuthority` to someone else `ASSET_OWNERSHIP_TRANSFER`, to no one `solana.intent.makeImmutable`; `close` names the program whose data it closes |
 | `solana-transaction` | | The root of a transaction | |
 | `text`, `siws`, `offchain-message` | | Messages | |
 
@@ -243,6 +245,26 @@ programs, which the built-in decoders read first; it cannot remove a warning, se
 and it adds no warning of its own, because nothing in an IDL says what an instruction does with what it is given. An
 instruction an IDL describes as `claim_reward` can still move everything the signing accounts allow it to. No
 third-party IDL ships with this package.
+
+## How it is tested
+
+On the engine as WebAssembly (`@hzblj/nitro-crypto/testing`), offline, on a fixed clock:
+
+- **Parity.** Instruction data built by `@solana/kit` 8.5.0's program clients (`@solana-program/system`, `token`,
+  `token-2022`, `compute-budget`, `memo`, `stake`, `address-lookup-table`, `loader-v3`) read back field for field;
+  v0 transactions with lookup tables and durable nonce transactions compiled by kit; off-chain messages, all three v0
+  formats and v1, encoded by `@hzblj/crypto-solana`.
+- **Every warning,** raised and in a near case that does not raise it, on the model: codes, severities, action paths,
+  field ids, `bigint` values.
+- **Real-world samples,** whole: an aggregator's v0 swap with and without its lookup table and IDL, a drainer
+  (`setAuthority`, wrapped SOL closed to the attacker, SOL sent, the fee paid by the attacker), a durable nonce
+  transaction and a Sign In With Solana request, each compared field by field.
+- **Hostile input,** seeded so a failure replays: random and mutated transaction bytes, instruction data for every
+  built-in program (its layouts with random values, then cut, padded or flipped), random IDLs with honest and random
+  data, random JSON for an IDL, and random, sign-in and off-chain messages. Each case gives a result or a
+  `ClearSignError`, never anything else, in well under a second; a message that reads always gives a result.
+- **The package:** its runtime exports, frozen tables, every address in `SOLANA_PROGRAMS` and `SOLANA_TOKENS` a
+  32-byte key, no em dash in this README or the JSDoc, and a consumer type-checked against the packed tarball.
 
 ## Trust
 
