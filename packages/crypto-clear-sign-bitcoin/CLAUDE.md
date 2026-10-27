@@ -2,8 +2,9 @@
 
 Bitcoin clear signing: PSBTs (BIP-174 version 0, P2WPKH and Taproot) and messages (BIP-322, legacy BIP-137, CAIP-122
 sign-in), read through the chain client of `@hzblj/crypto-bitcoin` into `@hzblj/crypto-clear-sign`'s `ClearSigning`.
-The README is the reference (every field id, code and decoder); [`docs/chain-package-contract.md`](../../docs/chain-package-contract.md)
-is the shape every chain package keeps.
+The README is the user documentation, kept short; the JSDoc in `src/` and the field ids and decoders below are the
+reference. [`docs/chain-package-contract.md`](../../docs/chain-package-contract.md) is the shape every chain package
+keeps.
 
 TypeScript over `@hzblj/crypto-clear-sign` (`workspace:^`) and `@hzblj/crypto-bitcoin` (a **dependency**, `^0.3.1`,
 as crypto-airgap's chain packages have it, not a peer as the contract suggests). `@hzblj/nitro-crypto` is a peer (one
@@ -42,6 +43,15 @@ no native module. `@scure/btc-signer` (pinned) is a devDependency: an independen
   code wins over a new one. A test asserts every own code (`package.test.ts` checks that each is named in a test).
 - **Resolvers** go through `createResolverContext` (addresses compared as they are: Bech32 is lowercase already). The
   `assets` option is this package's own: its failures are added to `RESOLVER_FAILED`'s `resolvers` param by hand.
+
+## Field ids and decoders
+
+Field ids are what warnings point at, so they are API. The root: `amount`, `yourCoins`, `backToYou`, `net`, `fee`,
+`feeRate`, `lockTime`, `size`, `replaceable`, `txid`, and for an offer `inscriptions`, `runes`, `inReturn`,
+`unfunded`. Each input `input-<n>`, with `-from`, `-amount`, `-verified`, `-sighash`, `-relativeLock`,
+`-inscriptions`, `-runes`, `-outpoint`, `-derivation`. An output: `to`, `amount`, `derivation`, `data`, `script`. A
+runestone: `etching` and `etching-*`, `mint`, `edict-<n>`, `pointer`, `flaw`. Decoders (`source.decoder`): `psbt`,
+`op-return`, `runestone`, `bip322`, `bip137`, `caip122`.
 
 ## Asked of the core
 

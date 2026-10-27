@@ -8,6 +8,12 @@ import * as api from '../src'
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
+/** The changesets waiting for a release, every package's: a release consumes them, so there may be none. */
+const changesets = () =>
+  readdirSync(new URL('../../../.changeset/', import.meta.url))
+    .filter(file => file.endsWith('.md') && file !== 'README.md')
+    .map(file => read(`../../../.changeset/${file}`))
+
 describe('the package', () => {
   test('VERSION matches package.json', () => {
     assert.equal(api.VERSION, JSON.parse(read('../package.json')).version)
@@ -53,12 +59,12 @@ describe('the package', () => {
     }
   })
 
-  test('the docs have no em dashes: README, CLAUDE.md, the JSDoc in src, the changeset', () => {
+  test('the docs have no em dashes: README, CLAUDE.md, the JSDoc in src, pending changesets', () => {
     const sources = readdirSync(new URL('../src', import.meta.url)).map(file => read(`../src/${file}`))
     const docs = [
       read('../README.md'),
       read('../CLAUDE.md'),
-      read('../../../.changeset/clear-sign-bitcoin.md'),
+      ...changesets(),
       ...sources.flatMap(source => source.match(/\/\*\*[\s\S]*?\*\//g) ?? []),
     ]
 
