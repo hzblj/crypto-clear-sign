@@ -12,7 +12,7 @@ Every package has its own `CLAUDE.md`: read that one before touching it. A chain
 | --- | --- | --- |
 | `packages/crypto-clear-sign/` | `@hzblj/crypto-clear-sign` | The display model, its checks (`createClearSigning`), field constructors, shared codes and texts, resolver interfaces and context, exact amounts, `plainText`. Headless, no dependencies. ADR 0001. |
 | `packages/crypto-clear-sign-bitcoin/`, `-ethereum/`, `-solana/` | `@hzblj/crypto-clear-sign-*` | Each chain's `clearSign*` functions, reading through that chain's client into the model. |
-| `apps/example/` | `crypto-clear-sign-example` (private) | The example app (not here yet). Runs the packages from **source**. |
+| `apps/example/` | `crypto-clear-sign-example` (private) | Expo Router app built with `@hzblj/kara-ui`: a gallery of signing requests per chain (Ethereum, Solana, Bitcoin), Paste, Settings; the reusable review components in `src/components/clear-signing`. Runs the packages from **source**. Its Node tests run every sample through the packages. See its `CLAUDE.md`. |
 | `scripts/` | | `pack-check.mjs` (packs, installs, type-checks each package's `test/consumer.ts`), `sync-versions.mjs`. |
 | `docs/` | | The chain package contract, compatibility, the decisions (`adr/`). `SECURITY.md` is at the root. |
 
@@ -26,6 +26,7 @@ package, never fetches, and parses nothing its adapter parses.
 yarn test                    # every workspace's tests; the chain packages on @hzblj/nitro-crypto/testing (WebAssembly)
 yarn typecheck / yarn lint   # tsc, Biome
 yarn pack:check              # what npm receives, and each package's test/consumer.ts against its tarball
+yarn ios / yarn android      # the example (dev client), Metro included
 yarn changeset               # describe a change for the next release
 ```
 
@@ -50,6 +51,10 @@ tests here run with `--conditions=source` and reach only this repository's sourc
 **The example runs the packages' source; the world runs `build/`.** Every package's `exports` names a `source` entry
 for the example's Metro and tsconfig `paths`. `publishConfig.exports` is the published map without it, and the pack
 check refuses a tarball that names it.
+
+**The example is the packages' integration test.** `apps/example/test/samples.test.ts` holds every sample's risk and
+warning codes, resolved and offline. A package change that moves one is either a bug or a change to say in its
+changeset, and that table moves with it.
 
 **`tsconfig.base.json` writes out `expo/tsconfig.base`'s options**, so the packages type-check without Expo installed;
 the example may extend `expo/tsconfig.base` on top of it.
