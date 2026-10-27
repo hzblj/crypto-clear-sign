@@ -30,6 +30,21 @@ const LABEL = BITCOIN_TEXTS.label
 /** Hex of 16 bytes or more, with or without `0x`: a hash or a blob, not words. */
 const HEX = /^(?:0x)?(?:[0-9a-f]{2}){16,}$/i
 
+/** Whether text has an ASCII control character other than tab and line breaks: bytes, not words. */
+const hasControls = (words: string) =>
+  [...words].some(character => {
+    const point = character.codePointAt(0) ?? 0
+
+    return (point < 0x20 && point !== 0x09 && point !== 0x0a && point !== 0x0d) || point === 0x7f
+  })
+
+/** Bytes as the text they are, or `undefined` when they are not UTF-8 or read as control characters. */
+const textOf = (bytes: Uint8Array) => {
+  const words = decodeUtf8(bytes)
+
+  return words === undefined || hasControls(words) ? undefined : words
+}
+
 /**
  * The networks an address's prefix says it is for: Bech32's human-readable part (`bc`, `tb`, `bcrt`), or Base58Check's
  * first character (`1` and `3` on mainnet, `m`, `n` and `2` on every test network). `undefined` when it says nothing.
@@ -220,7 +235,8 @@ const describeSignIn = async (
 /**
  * A message a BIP-322 (or legacy BIP-137) signature would sign, for the address `options.address` (the `signer`
  * unless given): its text and the address with its relation to the user. Text with hidden characters is
- * `HIDDEN_CHARACTERS`; bytes that are not UTF-8, and text that is only hex, are `BLIND_SIGNING`. A sign-in message
+ * `HIDDEN_CHARACTERS`; bytes that are not UTF-8 (or decode to control characters), and text that is only hex, are
+ * `BLIND_SIGNING`. A sign-in message
  * in CAIP-122's Bitcoin form is `intent.signIn`, its fields read (domain, account, statement, URI, nonce, times), with
  * `bitcoin.SIGN_IN_MISMATCH` when it names another account than the one signing and `EXPIRED` past its expiry.
  *
@@ -255,7 +271,7 @@ export const clearSignMessage = async (
     checkAddress(chain, options.signer)
   }
 
-  const words = typeof message === 'string' ? message : message instanceof Uint8Array ? decodeUtf8(message) : undefined
+  const words = typeof message === 'string' ? message : message instanceof Uint8Array ? textOf(message) : undefined
 
   if (typeof message !== 'string' && !(message instanceof Uint8Array)) {
     throw new ClearSignError('INVALID_INPUT', 'A message is text or bytes.')

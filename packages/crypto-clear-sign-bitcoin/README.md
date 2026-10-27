@@ -178,7 +178,8 @@ Understood by: built-in decoder (bip322)
 The payload is text or bytes, the message a BIP-322 (or, with `format: 'legacy'`, a BIP-137) signature signs, for
 `address` (the `signer` unless given). The result's `kind` is `message`: the text (`message`), the account
 (`signer`, with its relation) and the format. Text with hidden characters is `HIDDEN_CHARACTERS`; bytes that are not
-UTF-8 (shown raw) and text that is only hex (16 bytes or more) are `BLIND_SIGNING`.
+UTF-8, or decode to control characters (shown raw), and text that is only hex (16 bytes or more) are
+`BLIND_SIGNING`.
 
 A sign-in message in the form CAIP-122 (Sign-In With X) gives Bitcoin (EIP-4361's text for the `bip122` namespace:
 `example.com wants you to sign in with your Bitcoin account:`) is `intent.signIn` ("Sign in to example.com"), read into
