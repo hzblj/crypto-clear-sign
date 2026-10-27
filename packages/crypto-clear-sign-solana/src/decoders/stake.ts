@@ -2,7 +2,7 @@ import {INTENTS, LABELS, numberField, text, textField} from '@hzblj/crypto-clear
 
 import {SOLANA_TEXTS} from '../catalogs'
 import {createReader, malformed, type Reader} from '../reader'
-import {showAmount, solAmount} from '../scope'
+import {type Instruction, showAmount, solAmount} from '../scope'
 import {destinationWarning, handoverWarning} from './system'
 import {momentField} from './token'
 import type {Decoder} from './types'
@@ -21,17 +21,49 @@ const SYSVARS: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * Where the program's older layouts put their sysvars, by instruction: the positions, and how many accounts the older
+ * layout has at least. In the newer layouts a signer (the authority) or nothing stands there, except in
+ * `InitializeChecked`, whose staker may stand where the rent sysvar did: its count tells them apart.
+ */
+const OLDER_SYSVARS: ReadonlyMap<number, {readonly at: readonly number[]; readonly accounts: number}> = new Map([
+  [0, {accounts: 2, at: [1]}],
+  [1, {accounts: 3, at: [1]}],
+  [2, {accounts: 6, at: [2, 3, 4]}],
+  [4, {accounts: 5, at: [2, 3]}],
+  [5, {accounts: 3, at: [1]}],
+  [7, {accounts: 5, at: [2, 3]}],
+  [9, {accounts: 4, at: [1]}],
+  [10, {accounts: 4, at: [1]}],
+])
+
+/**
+ * Whether the account at `index` is a sysvar the program's older layout passes: one by its address, or one loaded from
+ * a lookup table that was not given where the older layout has a sysvar. Signers are never looked up, so such an
+ * account cannot be the authority the newer layout has there; taking it for one would show the wrong authority and
+ * hide a handover.
+ */
+const isSysvar = (accounts: Instruction['accounts'], tag: number, index: number) => {
+  const account = accounts[index]
+
+  if (account?.address !== undefined) {
+    return SYSVARS.has(account.address)
+  }
+
+  const older = OLDER_SYSVARS.get(tag)
+
+  return older !== undefined && accounts.length >= older.accounts && older.at.includes(index)
+}
+
+/**
  * The Stake program: creating a stake account, delegating it to a validator, deactivating, withdrawing, splitting,
  * merging and moving stake, and handing its authorities over. bincode, a `u32` tag first. Accounts are read by role
  * with the sysvars (clock, rent, stake history, stake config) skipped: the program's older layouts pass them and its
- * newer ones do not, and both read the same.
+ * newer ones do not, and both read the same, a sysvar loaded from a lookup table that was not given included.
  */
 export const describeStake: Decoder = async (instruction, build, scope) => {
   const reader = createReader(instruction.data)
   const tag = reader.u32()
-  const roles = instruction.accounts.flatMap((account, index) =>
-    account.address !== undefined && SYSVARS.has(account.address) ? [] : [index]
-  )
+  const roles = instruction.accounts.flatMap((_, index) => (isSysvar(instruction.accounts, tag, index) ? [] : [index]))
   const role = (at: number) => roles[at] ?? -1
   const stakeAccount = () => build.account(role(0), {id: 'stakeAccount', label: SOLANA_TEXTS.label.stakeAccount})
 
@@ -47,6 +79,7 @@ export const describeStake: Decoder = async (instruction, build, scope) => {
       const account = await stakeAccount()
       const stakerRef = await build.address(staker, {id: 'staker', label: SOLANA_TEXTS.label.staker})
       const withdrawerRef = await build.address(withdrawer, {id: 'withdrawer', label: SOLANA_TEXTS.label.withdrawer})
+      // A lockup holds until its time and its epoch have both passed; either one left at 0 does not hold.
       const locked = lockupTime !== 0n || lockupEpoch !== 0n
 
       return build.finish({
@@ -54,12 +87,12 @@ export const describeStake: Decoder = async (instruction, build, scope) => {
           account.field,
           stakerRef.field,
           withdrawerRef.field,
-          locked
-            ? momentField(scope, {id: 'lockupTime', label: SOLANA_TEXTS.label.lockupTime}, lockupTime, true)
-            : undefined,
-          locked
-            ? numberField({id: 'lockupEpoch', label: SOLANA_TEXTS.label.lockupEpoch, value: lockupEpoch})
-            : undefined,
+          lockupTime === 0n
+            ? undefined
+            : momentField(scope, {id: 'lockupTime', label: SOLANA_TEXTS.label.lockupTime}, lockupTime, true),
+          lockupEpoch === 0n
+            ? undefined
+            : numberField({id: 'lockupEpoch', label: SOLANA_TEXTS.label.lockupEpoch, value: lockupEpoch}),
           locked
             ? (await build.address(custodian, {id: 'custodian', label: SOLANA_TEXTS.label.custodian})).field
             : undefined,

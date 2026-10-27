@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
 import {findField, isClearSignError, plainText} from '@hzblj/crypto-clear-sign'
+import {solanaAdapter} from '@hzblj/crypto-solana'
 import {isCryptoError} from '@hzblj/nitro-crypto/adapter'
+import {createTestCryptoEngine} from '@hzblj/nitro-crypto/testing'
 import type {Address} from '@solana/kit'
 import {getSetComputeUnitPriceInstruction} from '@solana-program/compute-budget'
 import {getAdvanceNonceAccountInstruction, getTransferSolInstruction} from '@solana-program/system'
 
-import {clearSignTransaction} from '../src'
+import {clearSignTransaction, SOLANA_TOKENS} from '../src'
 import {
   address,
   addressOf,
@@ -28,6 +30,7 @@ import {
   signer,
   syncResolvers,
   throwingResolvers,
+  USDC,
   WALLET,
   warningOf,
   wire,
@@ -84,6 +87,143 @@ describe('clearSignTransaction', () => {
       id: 'solana:EtWTRABZaYq6iMfeYKouRu166VL2xqa1',
       name: 'Solana devnet',
     })
+  })
+
+  test('the testnet client`s results are for testnet', async () => {
+    const testnet = createTestCryptoEngine({adapters: [solanaAdapter({cluster: 'testnet'})]}).chains.solana
+    const result = await clearSignTransaction(testnet, {message: compile([send(STRANGER)])}, {resolvers: {clock}})
+
+    assert.deepEqual(result.chain, {
+      family: 'solana',
+      id: 'solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z',
+      name: 'Solana testnet',
+    })
+    // The built-in token list is the testnet's: wrapped SOL, and not mainnet's USDC.
+    assert.equal(SOLANA_TOKENS[result.chain.id]?.[USDC], undefined)
+  })
+
+  test('a wire transaction already signed, by the fee payer or by another signer, reads as its message', async () => {
+    const message = compile([send(STRANGER, 1n, OTHER)])
+    const unsigned = await clearSignTransaction(chain, {message}, {resolvers: {clock}, signer: OTHER})
+
+    for (const filled of [[0], [1], [0, 1]]) {
+      const bytes = wire(message)
+      for (const slot of filled) {
+        bytes.fill(7, 1 + slot * 64, 1 + (slot + 1) * 64)
+      }
+      const signed = await clearSignTransaction(chain, bytes, {resolvers: {clock}, signer: OTHER})
+
+      assert.deepEqual(signed, unsigned)
+    }
+
+    // The near miss: a signature slot too few is not a transaction.
+    const short = wire(message)
+    short[0] = 1
+    await rejects(() => clearSignTransaction(chain, short.subarray(0, short.length - 64)), 'INVALID_INPUT')
+  })
+
+  test('a transaction with no instructions: only its fee, nothing sent, nothing to say it does', async () => {
+    const result = await clear([])
+
+    assert.equal(result.intent.code, 'intent.unknown')
+    assert.equal(result.summary, undefined)
+    assert.deepEqual(result.actions, [])
+    assert.deepEqual(
+      result.fields.map(entry => entry.id),
+      ['feePayer', 'fee', 'recentBlockhash', 'computeUnitLimit', 'version']
+    )
+    assert.equal(field(result, 'fee', 'amount').value, 5_000n)
+    assert.equal(field(result, 'computeUnitLimit', 'number').value, 0)
+    assert.deepEqual(codes(result), [])
+    assert.equal(result.risk, 'none')
+  })
+
+  test('RESOLVER_FAILED: a lookup table resolver that fails with the others names every one, once', async () => {
+    const {tables} = lookedUp()
+    const message = compile([send(STRANGER), raw(PROGRAM, [[WALLET, 'w']], [1])], {tables, version: 0})
+    const result = await clearSignTransaction(
+      chain,
+      {message},
+      {
+        resolvers: {
+          ...throwingResolvers,
+          lookupTables: {
+            lookupTable: async () => {
+              throw new Error('rpc down')
+            },
+          },
+        },
+        signer: WALLET,
+      }
+    )
+    const raised = warningOf(result, 'RESOLVER_FAILED')
+
+    assert.equal(raised.params?.resolvers, 'tokens, names, descriptors, lookupTables')
+    assert.deepEqual(raised.action, [])
+    assert.deepEqual(codesAt(result, [0]).sort(), ['UNKNOWN_DESTINATION', 'solana.UNRESOLVED_LOOKUPS'])
+
+    // The near miss: the other resolvers failing alone do not name the lookup tables.
+    const alone = await clearSignTransaction(chain, {message}, {resolvers: throwingResolvers, signer: WALLET})
+    assert.equal(warningOf(alone, 'RESOLVER_FAILED').params?.resolvers, 'tokens, names, descriptors')
+  })
+
+  test('lookup tables given that the message does not use are not asked for, nor in the way', async () => {
+    const unused = {[address(63)]: [FRIEND], [address(64)]: []}
+    const legacy = await clearSignTransaction(
+      chain,
+      {message: compile([send(STRANGER)])},
+      {addressLookupTables: unused}
+    )
+    assert.equal(findField(legacy, 'lookupTables'), undefined)
+
+    const {message, tables} = lookedUp()
+    let asked = 0
+    const result = await clearSignTransaction(
+      chain,
+      {message},
+      {
+        addressLookupTables: {...unused, ...tables},
+        resolvers: {
+          lookupTables: {
+            lookupTable: () => {
+              asked += 1
+              return undefined
+            },
+          },
+        },
+        signer: WALLET,
+      }
+    )
+
+    assert.equal(asked, 0)
+    assert.deepEqual(
+      field(result, 'lookupTables', 'list').items.map(item => item.kind === 'address' && item.value),
+      [TABLE]
+    )
+    assert.equal(addressOf(first(result), 'recipient').value, STRANGER)
+    assert.ok(!codes(result).includes('solana.UNRESOLVED_LOOKUPS'))
+  })
+
+  test('lookup tables given in the wrong shape are INVALID_ARGUMENT, used or not', async () => {
+    const {message} = lookedUp()
+    const legacy = compile([send(STRANGER)])
+
+    for (const addressLookupTables of [
+      null,
+      'tables',
+      [[OTHER]],
+      {[TABLE]: null},
+      {[TABLE]: OTHER},
+      {[TABLE]: [1, 2]},
+      {[TABLE]: new Array(257).fill(OTHER)},
+    ]) {
+      for (const bytes of [message, legacy]) {
+        await rejects(
+          () => clearSignTransaction(chain, {message: bytes}, {addressLookupTables: addressLookupTables as never}),
+          'INVALID_ARGUMENT'
+        )
+      }
+    }
   })
 
   test('the wire transaction and its message read the same', async () => {

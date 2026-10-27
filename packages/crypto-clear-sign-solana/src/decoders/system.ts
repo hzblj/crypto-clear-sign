@@ -52,7 +52,8 @@ export const describeSystem: Decoder = async (instruction, build, scope) => {
   switch (tag) {
     case 0:
     case 13: {
-      // CreateAccount: funding, new account. CreateAccountAllowPrefund: new account, payer.
+      // CreateAccount: funding, new account. CreateAccountAllowPrefund: new account, then the payer, which it needs
+      // only to move lamports: an account already funded is created without one.
       const lamports = reader.u64()
       const space = reader.u64()
       const owner = reader.pubkey()
@@ -61,8 +62,11 @@ export const describeSystem: Decoder = async (instruction, build, scope) => {
       const created = await build.account(newIndex, {id: 'newAccount', label: SOLANA_TEXTS.label.newAccount})
       const amount = solAmount({id: 'amount', label: LABELS.amount}, lamports)
       const program = await build.address(owner, {id: 'ownerProgram', label: SOLANA_TEXTS.label.ownerProgram})
-      const funding = await build.account(fundingIndex, {id: 'from', label: LABELS.from})
-      scope.ledger.lamports(funding.address, lamports)
+      const funding =
+        tag === 0 || lamports > 0n
+          ? await build.account(fundingIndex, {id: 'from', label: LABELS.from})
+          : await build.optionalAccount(fundingIndex, {id: 'from', label: LABELS.from})
+      scope.ledger.lamports(funding?.address, lamports)
 
       return build.finish({
         fields: [
@@ -70,7 +74,7 @@ export const describeSystem: Decoder = async (instruction, build, scope) => {
           amount,
           program.field,
           numberField({id: 'space', label: SOLANA_TEXTS.label.space, unit: SOLANA_TEXTS.unit.bytes, value: space}),
-          funding.field,
+          funding?.field,
         ],
         intent: SOLANA_TEXTS.intent.createAccount,
         summary: text(SOLANA_TEXTS.summary.createAccount, {

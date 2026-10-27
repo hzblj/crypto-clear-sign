@@ -112,16 +112,24 @@ export const describeLoader: Decoder = async (instruction, build, scope) => {
       reader.end()
       const account = await build.account(0, {id: 'account', label: LABELS.account})
       const recipient = await build.account(1, {id: 'recipient', label: LABELS.recipient})
-      const authority = await build.optionalAccount(2, {
-        id: 'authority',
-        label: SOLANA_TEXTS.label.authority,
-        secondary: true,
-      })
+      // Clients fill a left-out optional account with the loader itself: then there is none, and it is shown by role.
+      const given = (index: number) => {
+        const account = instruction.accounts[index]
+        return account !== undefined && account.address !== instruction.programId
+      }
+      const authority = given(2)
+        ? await build.account(2, {id: 'authority', label: SOLANA_TEXTS.label.authority, secondary: true})
+        : undefined
+      // Closing a program's data account names the program too: what the user knows it by.
+      const program = given(3) ? await build.account(3, {id: 'programAccount', label: LABELS.program}) : undefined
 
       return build.finish({
-        fields: [account.field, recipient.field, authority?.field],
+        fields: [program?.field, account.field, recipient.field, authority?.field],
         intent: SOLANA_TEXTS.intent.closeProgram,
-        summary: text(SOLANA_TEXTS.summary.closeAccount, {account: account.display, recipient: recipient.display}),
+        summary: text(SOLANA_TEXTS.summary.closeAccount, {
+          account: (program ?? account).display,
+          recipient: recipient.display,
+        }),
         warnings: [closeWarning(recipient, authority, ['recipient'])],
       })
     }

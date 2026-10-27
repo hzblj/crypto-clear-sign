@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
+import {findField} from '@hzblj/crypto-clear-sign'
+import {base58} from '@hzblj/nitro-crypto/adapter'
+
 import type {Address, ProgramDerivedAddressBump} from '@solana/kit'
 import {
   getCloseLookupTableInstruction,
@@ -34,6 +37,7 @@ import {
   getInitializeCheckedInstruction,
   getInitializeInstruction,
   getMergeInstruction,
+  getMoveLamportsInstruction,
   getMoveStakeInstruction,
   getSplitInstruction,
   getWithdrawInstruction,
@@ -41,15 +45,20 @@ import {
 } from '@solana-program/stake'
 import {getCreateAssociatedTokenInstruction, getRecoverNestedAssociatedTokenInstruction} from '@solana-program/token'
 
+import {clearSignTransaction} from '../src'
+
 import {
   address,
   addressOf,
   chain,
   clear,
+  clock,
   codes,
   codesAt,
+  compile,
   field,
   first,
+  NOW,
   OTHER,
   raw,
   STRANGER,
@@ -71,6 +80,16 @@ const STAKE_PROGRAM = 'Stake11111111111111111111111111111111111111'
 const CLOCK = 'SysvarC1ock11111111111111111111111111111111'
 const HISTORY = 'SysvarStakeHistory1111111111111111111111111'
 const CONFIG = 'StakeConfig11111111111111111111111111111111'
+const RENT = 'SysvarRent111111111111111111111111111111111'
+const SYSVAR_TABLE = address(46)
+
+/** A v0 transaction of `instructions`, its sysvars (and whatever else the table holds) loaded from a lookup table. */
+const lookedUp = async (instructions: Parameters<typeof clear>[0], tables: Record<string, string[]>, given = false) =>
+  clearSignTransaction(
+    chain,
+    {message: compile(instructions, {tables, version: 0})},
+    {...(given ? {addressLookupTables: tables} : {}), resolvers: {clock}, signer: WALLET}
+  )
 
 describe('Associated Token Account', () => {
   test('create and createIdempotent: the owner, the token, the account', async () => {
@@ -335,6 +354,185 @@ describe('Stake', () => {
     assert.deepEqual(codesAt(checked, [0]), [])
     assert.equal(addressOf(first(checked), 'newAuthority').relation, 'self')
   })
+  test('initialize with a lockup: until when, until which epoch, and its custodian', async () => {
+    const initialize = (unixTimestamp: bigint, epoch: bigint) =>
+      getInitializeInstruction({
+        arg0: {staker: as(WALLET), withdrawer: as(WALLET)},
+        arg1: {custodian: as(OTHER), epoch, unixTimestamp},
+        stake: as(STAKE),
+      })
+    const day = 24n * 60n * 60n
+    const now = BigInt(NOW / 1000)
+    const result = await clear([
+      initialize(now + day, 800n),
+      initialize(now - day, 0n),
+      initialize(0n, 800n),
+      initialize(0n, 0n),
+    ])
+    const [future, past, epoch, none] = result.actions
+
+    assert.ok(future && past && epoch && none)
+    assert.equal(field(future, 'lockupTime', 'datetime').value, NOW + 86_400_000)
+    assert.equal(field(future, 'lockupTime', 'datetime').expired, false)
+    assert.equal(field(future, 'lockupEpoch', 'number').value, 800n)
+    assert.equal(addressOf(future, 'custodian').value, OTHER)
+    // A lockup whose time has passed has expired; one of an epoch alone has no time to show.
+    assert.equal(field(past, 'lockupTime', 'datetime').expired, true)
+    assert.equal(findField(past, 'lockupEpoch'), undefined)
+    assert.equal(findField(epoch, 'lockupTime'), undefined)
+    assert.equal(field(epoch, 'lockupEpoch', 'number').value, 800n)
+    assert.equal(addressOf(epoch, 'custodian').value, OTHER)
+    // No lockup: neither a time, an epoch nor a custodian.
+    for (const id of ['lockupTime', 'lockupEpoch', 'custodian']) {
+      assert.equal(findField(none, id), undefined)
+    }
+    assert.equal(addressOf(none, 'withdrawer').relation, 'self')
+    assert.deepEqual(codes(result), [])
+  })
+
+  test('moveLamports: SOL between two stake accounts, nothing sent', async () => {
+    const result = await clear([
+      getMoveLamportsInstruction({
+        args: 11n,
+        destinationStake: as(OTHER),
+        sourceStake: as(STAKE),
+        stakeAuthority: signer(WALLET),
+      }),
+    ])
+    const action = first(result)
+
+    assert.deepEqual(action.source, {decoder: 'stake-program', kind: 'builtin'})
+    assert.equal(action.intent.code, 'solana.intent.moveStake')
+    assert.equal(field(action, 'amount', 'amount').value, 11n)
+    assert.equal(addressOf(action, 'stakeAccount').value, STAKE)
+    assert.equal(addressOf(action, 'destination').value, OTHER)
+    assert.equal(addressOf(action, 'authority').relation, 'self')
+    assert.equal(findField(result, 'sent'), undefined)
+    assert.deepEqual(codes(result), [])
+  })
+
+  test('sysvars from a lookup table that was not given are skipped as sysvars: the authority is still the signer', async () => {
+    const tables = {[SYSVAR_TABLE]: [CLOCK, HISTORY, CONFIG, RENT]}
+    // Authorize, the older layout: stake, clock, authority; the new authority in the data.
+    const authorize = raw(
+      STAKE_PROGRAM,
+      [
+        [STAKE, 'w'],
+        [CLOCK, ''],
+        [WALLET, 's'],
+      ],
+      [1, 0, 0, 0, ...base58.decode(STRANGER), 1, 0, 0, 0]
+    )
+
+    for (const given of [true, false]) {
+      const result = await lookedUp([authorize], tables, given)
+      const action = first(result)
+      const raised = warningOf(result, 'ASSET_OWNERSHIP_TRANSFER')
+
+      assert.equal(action.intent.code, 'intent.transferOwnership')
+      assert.equal(addressOf(action, 'authority').relation, 'self')
+      assert.equal(addressOf(action, 'newAuthority').value, STRANGER)
+      assert.deepEqual(raised.fields, ['newAuthority', 'stakeAccount'])
+      assert.equal(result.risk, 'critical')
+
+      if (given) {
+        assert.equal(addressOf(action, 'account-1').value, CLOCK)
+        assert.ok(!codes(result).includes('solana.UNRESOLVED_LOOKUPS'))
+      } else {
+        assert.deepEqual(
+          field(action, 'account-1', 'list').items.map(item => item.id),
+          ['account-1.lookupTable', 'account-1.lookupIndex']
+        )
+        assert.deepEqual(warningOf(result, 'solana.UNRESOLVED_LOOKUPS').fields, ['account-1'])
+      }
+    }
+  })
+
+  test('sysvars from a lookup table that was not given: delegate, withdraw and authorizeChecked read by role', async () => {
+    const tables = {[SYSVAR_TABLE]: [CLOCK, HISTORY, CONFIG]}
+    const result = await lookedUp(
+      [
+        raw(
+          STAKE_PROGRAM,
+          [
+            [STAKE, 'w'],
+            [VOTE, ''],
+            [CLOCK, ''],
+            [HISTORY, ''],
+            [CONFIG, ''],
+            [WALLET, 's'],
+          ],
+          [2, 0, 0, 0]
+        ),
+        raw(
+          STAKE_PROGRAM,
+          [
+            [STAKE, 'w'],
+            [OTHER, 'w'],
+            [CLOCK, ''],
+            [HISTORY, ''],
+            [WALLET, 's'],
+          ],
+          [4, 0, 0, 0, ...new Array(8).fill(1)]
+        ),
+        raw(
+          STAKE_PROGRAM,
+          [
+            [STAKE, 'w'],
+            [CLOCK, ''],
+            [WALLET, 's'],
+            [STRANGER, 's'],
+          ],
+          [10, 0, 0, 0, 1, 0, 0, 0]
+        ),
+      ],
+      tables
+    )
+    const [delegate, withdraw, checked] = result.actions
+
+    assert.ok(delegate && withdraw && checked)
+    assert.equal(addressOf(delegate, 'validator').value, VOTE)
+    assert.equal(addressOf(delegate, 'authority').relation, 'self')
+    assert.equal(addressOf(withdraw, 'recipient').value, OTHER)
+    assert.equal(addressOf(withdraw, 'authority').relation, 'self')
+    assert.equal(addressOf(checked, 'authority').relation, 'self')
+    assert.equal(addressOf(checked, 'newAuthority').value, STRANGER)
+    assert.equal(field(checked, 'authorityType', 'text').value, 'withdrawer')
+    assert.deepEqual(
+      result.warnings.map(entry => [entry.code, entry.action.join('.'), entry.fields.join()]),
+      [
+        ['ASSET_OWNERSHIP_TRANSFER', '2', 'newAuthority,stakeAccount'],
+        ['solana.UNRESOLVED_LOOKUPS', '0', 'account-2,account-3,account-4'],
+        ['solana.UNRESOLVED_LOOKUPS', '1', 'account-2,account-3'],
+        ['solana.UNRESOLVED_LOOKUPS', '2', 'account-1'],
+        ['solana.OTHER_SIGNERS', '', 'signers'],
+        ['UNKNOWN_DESTINATION', '1', 'recipient'],
+      ]
+    )
+  })
+
+  test('accounts the newer layouts look up are not taken for sysvars: a withdraw recipient, a staker', async () => {
+    const tables = {[SYSVAR_TABLE]: [OTHER]}
+    const result = await lookedUp(
+      [
+        getWithdrawInstruction({args: 5n, recipient: as(OTHER), stake: as(STAKE), withdrawAuthority: signer(WALLET)}),
+        getInitializeCheckedInstruction({
+          stake: as(STAKE),
+          stakeAuthority: as(OTHER),
+          withdrawAuthority: signer(WALLET),
+        }),
+      ],
+      tables
+    )
+    const [withdraw, initialize] = result.actions
+
+    assert.ok(withdraw && initialize)
+    assert.equal(field(withdraw, 'recipient', 'list').items.length, 2)
+    assert.equal(addressOf(withdraw, 'authority').relation, 'self')
+    assert.equal(field(initialize, 'staker', 'list').items.length, 2)
+    assert.equal(addressOf(initialize, 'withdrawer').relation, 'self')
+    assert.deepEqual(codesAt(result, [1]), ['solana.UNRESOLVED_LOOKUPS'])
+  })
 })
 
 describe('Address Lookup Table', () => {
@@ -475,5 +673,36 @@ describe('BPF Upgradeable Loader', () => {
     assert.equal(result.actions[1] && field(result.actions[1], 'offset', 'number').value, 16)
     assert.equal(result.actions[2] && field(result.actions[2], 'maxDataLength', 'number').value, 4096n)
     assert.deepEqual(codesAt(result, [4]), ['solana.CLOSE_TO_OTHER'])
+  })
+  test('close with its program account: the program named, CLOSE_TO_OTHER to a stranger, not to the user', async () => {
+    const close = (destination: string) =>
+      getCloseInstruction({
+        authority: signer(WALLET),
+        bufferOrProgramDataAccount: as(PROGRAM_DATA),
+        destinationAccount: as(destination),
+        programAccount: as(PROGRAM),
+      })
+    const away = await clear([close(STRANGER)])
+    const action = first(away)
+
+    assert.equal(action.intent.code, 'solana.intent.closeProgram')
+    assert.deepEqual(addressOf(action, 'programAccount').label, {code: 'label.program', text: 'Program'})
+    assert.equal(addressOf(action, 'programAccount').value, PROGRAM)
+    assert.equal(addressOf(action, 'account').value, PROGRAM_DATA)
+    assert.equal(action.summary?.params?.account, PROGRAM)
+    assert.equal(findField(action, 'account-3'), undefined)
+    assert.deepEqual(warningOf(away, 'solana.CLOSE_TO_OTHER').fields, ['recipient'])
+
+    const home = await clear([close(WALLET)])
+    assert.deepEqual(codesAt(home, [0]), [])
+
+    // A buffer closed without a program or an authority names neither: the client fills both with the loader.
+    const buffer = await clear([
+      getCloseInstruction({bufferOrProgramDataAccount: as(BUFFER), destinationAccount: as(WALLET)}),
+    ])
+    assert.equal(findField(first(buffer), 'programAccount'), undefined)
+    assert.equal(findField(first(buffer), 'authority'), undefined)
+    assert.equal(addressOf(first(buffer), 'account-3').name, 'BPF Upgradeable Loader')
+    assert.equal(first(buffer).summary?.params?.account, BUFFER)
   })
 })

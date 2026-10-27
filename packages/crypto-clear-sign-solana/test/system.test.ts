@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
+import {findField} from '@hzblj/crypto-clear-sign'
 import type {Address} from '@solana/kit'
 import {
   getAdvanceNonceAccountInstruction,
@@ -139,6 +140,43 @@ describe('System Program', () => {
     assert.equal(field(seeded, 'seed', 'text').value, 'vault')
     assert.equal(field(seeded, 'amount', 'amount').value, 9n)
     assert.equal(addressOf(seeded, 'base').value, WALLET)
+  })
+
+  test('createAccountAllowPrefund: the payer`s lamports are sent; none without a payer, which an account funded needs not', async () => {
+    const prefund = (lamports: bigint | undefined, payer?: string) =>
+      getCreateAccountAllowPrefundInstruction({
+        ...(lamports === undefined ? {} : {lamports}),
+        newAccount: signer(STRANGER),
+        ...(payer === undefined ? {} : {payer: signer(payer)}),
+        programAddress: as(PROGRAM),
+        space: 8,
+      })
+
+    // The wallet pays: what it puts in is sent.
+    const paid = await clear([prefund(2_000_000n, WALLET)])
+    const sent = field(paid, 'sent', 'list').items
+    assert.equal(sent.length, 1)
+    assert.equal(sent[0]?.kind === 'amount' && sent[0].value, 2_000_000n)
+    assert.equal(addressOf(first(paid), 'from').relation, 'self')
+
+    // Another signer pays: nothing leaves the wallet.
+    const other = await clear([prefund(2_000_000n, OTHER)])
+    assert.equal(findField(other, 'sent'), undefined)
+    assert.equal(addressOf(first(other), 'from').value, OTHER)
+
+    // No payer for an account already funded: read, with no payer and nothing sent.
+    const funded = await clear([prefund(undefined)])
+    assert.equal(first(funded).intent.code, 'solana.intent.createAccount')
+    assert.equal(field(first(funded), 'amount', 'amount').value, 0n)
+    assert.equal(findField(first(funded), 'from'), undefined)
+    assert.equal(findField(funded, 'sent'), undefined)
+    assert.deepEqual(codesAt(funded, [0]), [])
+
+    // Lamports with no one to pay them: the program refuses it, and it is shown raw.
+    const unpaid = await clear([prefund(5n)])
+    assert.deepEqual(first(unpaid).source, {kind: 'unknown'})
+    assert.deepEqual(codesAt(unpaid, [0]), ['UNKNOWN_CONTRACT_CALL'])
+    assert.equal(findField(unpaid, 'sent'), undefined)
   })
 
   test('ASSET_OWNERSHIP_TRANSFER: assigning the signer`s account to a program is critical', async () => {

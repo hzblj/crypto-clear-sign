@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
-import {actionAt, maxUint} from '@hzblj/crypto-clear-sign'
+import {actionAt, findField, maxUint} from '@hzblj/crypto-clear-sign'
 import {type Address, none, some} from '@solana/kit'
 import {
   AuthorityType,
+  getAmountToUiAmountInstruction,
   getApproveCheckedInstruction,
   getApproveInstruction,
   getBatchInstruction,
@@ -13,10 +14,14 @@ import {
   getCloseAccountInstruction,
   getCreateAssociatedTokenIdempotentInstruction,
   getFreezeAccountInstruction,
+  getGetAccountDataSizeInstruction,
+  getInitializeAccount2Instruction,
   getInitializeAccount3Instruction,
   getInitializeAccountInstruction,
+  getInitializeImmutableOwnerInstruction,
   getInitializeMint2Instruction,
   getInitializeMintInstruction,
+  getInitializeMultisig2Instruction,
   getInitializeMultisigInstruction,
   getMintToCheckedInstruction,
   getMintToInstruction,
@@ -26,6 +31,7 @@ import {
   getThawAccountInstruction,
   getTransferCheckedInstruction,
   getTransferInstruction,
+  getUiAmountToAmountInstruction,
   getUnwrapLamportsInstruction,
   getWithdrawExcessLamportsInstruction,
 } from '@solana-program/token'
@@ -36,9 +42,11 @@ import {
   addressOf,
   chain,
   clear,
+  codes,
   codesAt,
   field,
   first,
+  fromKit,
   OTHER,
   raw,
   STRANGER,
@@ -538,6 +546,168 @@ describe('SPL Token', () => {
     assert.deepEqual(first(result).source, {kind: 'unknown'})
   })
 
+  test('initializeImmutableOwner and the amount conversions, on the Token program: read, nothing moved', async () => {
+    const result = await clear([
+      getInitializeImmutableOwnerInstruction({account: as(SOURCE)}),
+      getAmountToUiAmountInstruction({amount: 1_500_000n, mint: as(USDC)}),
+      getUiAmountToAmountInstruction({mint: as(USDC), uiAmount: '1.5'}),
+      getGetAccountDataSizeInstruction({mint: as(USDC)}),
+    ])
+    const [immutable, toUi, fromUi, size] = result.actions
+
+    assert.ok(immutable && toUi && fromUi && size)
+    assert.deepEqual(
+      result.actions.map(action => [action.source.kind === 'builtin' && action.source.decoder, action.intent.code]),
+      [
+        ['spl-token', 'solana.intent.initializeTokenAccount'],
+        ['spl-token', 'solana.intent.readToken'],
+        ['spl-token', 'solana.intent.readToken'],
+        ['spl-token', 'solana.intent.readToken'],
+      ]
+    )
+    assert.equal(addressOf(immutable, 'account').value, SOURCE)
+    assert.equal(field(toUi, 'amount', 'number').value, 1_500_000n)
+    assert.equal(addressOf(toUi, 'mint').relation, 'token')
+    assert.equal(field(fromUi, 'amount', 'text').value, '1.5')
+    assert.equal(findField(size, 'extensions'), undefined)
+    assert.equal(findField(result, 'sent'), undefined)
+    assert.deepEqual(codes(result), [])
+
+    // The near miss: text that is not UTF-8, or bytes the instruction does not take, are what the program refuses.
+    const refused = await clear([
+      raw(TOKEN, [[USDC, '']], [24, 0xff]),
+      raw(TOKEN, [[SOURCE, 'w']], [22, 0]),
+      raw(TOKEN, [[USDC, '']], [23, 1, 2]),
+    ])
+    assert.deepEqual(
+      refused.actions.map(action => action.source.kind),
+      ['unknown', 'unknown', 'unknown']
+    )
+  })
+
+  test('getAccountDataSize names the extensions Token-2022 is asked to size; the Token program takes none', async () => {
+    const result = await clear([
+      raw(TOKEN_2022, [[UNKNOWN_MINT, '']], [21, 1, 0, 7, 0, 14, 0]),
+      fromKit(getGetAccountDataSizeInstruction({mint: as(UNKNOWN_MINT)}, T22)),
+    ])
+    const [sized, bare] = result.actions
+
+    assert.ok(sized && bare)
+    assert.deepEqual(sized.source, {decoder: 'spl-token-2022', kind: 'builtin'})
+    assert.deepEqual(
+      field(sized, 'extensions', 'list').items.map(item => [item.id, item.kind === 'number' && item.value]),
+      [
+        ['extension-0', 1],
+        ['extension-1', 7],
+        ['extension-2', 14],
+      ]
+    )
+    assert.equal(findField(bare, 'extensions'), undefined)
+    assert.deepEqual(codes(result), [])
+
+    // Half an extension type, or an extension asked of the Token program, is refused.
+    const refused = await clear([
+      raw(TOKEN_2022, [[UNKNOWN_MINT, '']], [21, 1, 0, 7]),
+      raw(TOKEN, [[UNKNOWN_MINT, '']], [21, 1, 0]),
+    ])
+    assert.deepEqual(codesAt(refused, [0]), ['UNKNOWN_CONTRACT_CALL'])
+    assert.deepEqual(codesAt(refused, [1]), ['UNKNOWN_CONTRACT_CALL'])
+  })
+
+  test('initializeAccount2 and initializeMultisig2: the owner in the data, the signers without the rent sysvar', async () => {
+    const result = await clear([
+      getInitializeAccount2Instruction({account: as(SOURCE), mint: as(USDC), owner: as(OTHER)}),
+      getInitializeMultisig2Instruction({
+        m: 2,
+        multisig: as(DESTINATION),
+        signers: [as(WALLET), as(OTHER), as(STRANGER)],
+      }),
+      getInitializeMultisigInstruction({m: 1, multisig: as(DESTINATION), signers: [as(WALLET)]}),
+    ])
+    const [account, multisig2, multisig] = result.actions
+
+    assert.ok(account && multisig2 && multisig)
+    assert.equal(account.intent.code, 'solana.intent.initializeTokenAccount')
+    assert.equal(addressOf(account, 'owner').value, OTHER)
+    assert.equal(addressOf(account, 'mint').value, USDC)
+    assert.equal(account.summary?.params?.token, 'USDC')
+    // The rent sysvar the instruction still passes is shown by its role, named.
+    assert.equal(addressOf(account, 'account-2').name, 'Rent Sysvar')
+
+    assert.equal(multisig2.intent.code, 'solana.intent.initializeMultisig')
+    assert.equal(field(multisig2, 'requiredSigners', 'number').value, 2)
+    assert.deepEqual(
+      field(multisig2, 'signers', 'list').items.map(item => [item.id, item.kind === 'address' && item.value]),
+      [
+        ['signer-0', WALLET],
+        ['signer-1', OTHER],
+        ['signer-2', STRANGER],
+      ]
+    )
+    assert.equal(findField(multisig2, 'account-1'), undefined)
+    // The first version passes the rent sysvar before its signers.
+    assert.equal(addressOf(multisig, 'account-1').name, 'Rent Sysvar')
+    assert.equal(field(multisig, 'signers', 'list').items.length, 1)
+    assert.deepEqual(codes(result), [])
+  })
+  test('a batch inside a batch: the inner one is what the program refuses, raw; the rest still read', async () => {
+    const transfer = fromKit(
+      getTransferCheckedInstruction({
+        amount: 3n,
+        authority: signer(WALLET),
+        decimals: 6,
+        destination: as(DESTINATION),
+        mint: as(USDC),
+        source: as(SOURCE),
+      })
+    )
+    const inner = [255, 0, 1, 17]
+    const result = await clear([
+      {
+        accounts: [...transfer.accounts, {address: SOURCE, isSigner: false, isWritable: true}],
+        data: Uint8Array.from([255, 4, transfer.data.length, ...transfer.data, 1, inner.length, ...inner]),
+        programId: TOKEN,
+      },
+    ])
+    const batch = first(result)
+
+    assert.equal(batch.intent.code, 'solana.intent.tokenBatch')
+    assert.equal(batch.actions.length, 2)
+    assert.equal(batch.actions[0]?.intent.code, 'intent.send')
+    assert.deepEqual(batch.actions[1]?.source, {kind: 'unknown'})
+    assert.equal(batch.actions[1] && field(batch.actions[1], 'data', 'raw').value, '0xff000111')
+    assert.deepEqual(warningOf(result, 'UNKNOWN_CONTRACT_CALL').action, [0, 1])
+    assert.equal(batch.risk, 'high')
+  })
+
+  test('a batch shown raw counts nothing as sent, though an instruction in it would have', async () => {
+    const transfer = fromKit(
+      getTransferCheckedInstruction({
+        amount: 3n,
+        authority: signer(WALLET),
+        decimals: 6,
+        destination: as(DESTINATION),
+        mint: as(USDC),
+        source: as(SOURCE),
+      })
+    )
+    const batch = (extra: number) => ({
+      accounts: [
+        ...transfer.accounts,
+        ...Array.from({length: extra}, () => ({address: OTHER, isSigner: false, isWritable: false})),
+      ],
+      data: Uint8Array.from([255, 4, transfer.data.length, ...transfer.data]),
+      programId: TOKEN,
+    })
+
+    const read = await clear([batch(0)])
+    assert.equal(field(read, 'sent', 'list').items.length, 1)
+
+    const refused = await clear([batch(1)])
+    assert.deepEqual(first(refused).source, {kind: 'unknown'})
+    assert.equal(findField(refused, 'sent'), undefined)
+  })
+
   test('Token-2022 instructions on the Token program are not read, nor unknown tags', async () => {
     for (const data of [[25, 0], [26, 1], [200]]) {
       const result = await clear([raw(TOKEN, [[UNKNOWN_MINT, 'w']], data)])
@@ -804,6 +974,47 @@ describe('Token-2022', () => {
     )
     assert.deepEqual(codesAt(result, [2]), ['UNKNOWN_DESTINATION'])
     assert.equal(result.actions[4] && field(result.actions[4], 'amount', 'amount').value, 9n)
+  })
+
+  test('withdrawWithheldTokensFromAccounts: the mint, the receiver, the authority, the accounts harvested by role', async () => {
+    const sources = [address(33), address(34)]
+    const result = await clear([
+      token2022.getWithdrawWithheldTokensFromAccountsInstruction({
+        feeReceiver: as(STRANGER),
+        mint: as(UNKNOWN_MINT),
+        numTokenAccounts: 2,
+        sources: sources.map(as),
+        withdrawWithheldAuthority: signer(WALLET),
+      }),
+    ])
+    const action = first(result)
+
+    assert.deepEqual(action.source, {decoder: 'spl-token-2022', kind: 'builtin'})
+    assert.equal(action.intent.code, 'solana.intent.withdrawTokenFees')
+    assert.equal(addressOf(action, 'mint').value, UNKNOWN_MINT)
+    assert.equal(addressOf(action, 'recipient').value, STRANGER)
+    assert.equal(addressOf(action, 'authority').relation, 'self')
+    assert.deepEqual(
+      ['account-3', 'account-4'].map(id => [addressOf(action, id).value, addressOf(action, id).label.code]),
+      sources.map(value => [value, 'solana.label.writableAccount'])
+    )
+    assert.deepEqual(warningOf(result, 'UNKNOWN_DESTINATION').fields, ['recipient'])
+    assert.equal(findField(result, 'sent'), undefined)
+
+    // The near miss: to the user's own account, nothing is warned about.
+    const own = await clear(
+      [
+        token2022.getWithdrawWithheldTokensFromAccountsInstruction({
+          feeReceiver: as(OTHER),
+          mint: as(UNKNOWN_MINT),
+          numTokenAccounts: 0,
+          sources: [],
+          withdrawWithheldAuthority: signer(WALLET),
+        }),
+      ],
+      {resolvers: syncResolvers}
+    )
+    assert.deepEqual(codesAt(own, [0]), [])
   })
 
   test('confidential transfers are not read: UNKNOWN_CONTRACT_CALL with the raw data', async () => {
