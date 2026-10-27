@@ -35,6 +35,7 @@ export {
   type BooleanField,
   booleanField,
   type DateTimeField,
+  type DateTimeFieldInput,
   type DurationField,
   dateTimeField,
   durationField,

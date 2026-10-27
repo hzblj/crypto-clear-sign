@@ -97,6 +97,34 @@ describe('field constructors', () => {
 
     throwsInvalid(() => dateTimeField({label: LABELS.deadline, now: Number.NaN, value: NOW}))
     throwsInvalid(() => dateTimeField({label: LABELS.deadline, now: NOW, value: Number.POSITIVE_INFINITY}))
+    throwsInvalid(() => dateTimeField({label: LABELS.deadline, value: NOW} as never))
+  })
+
+  test('moments that are not deadlines: past without having expired, with or without now', () => {
+    const issued = dateTimeField({deadline: false, id: 'issuedAt', label: LABELS.issuedAt, value: NOW - 86_400_000})
+    assert.deepEqual(issued, {
+      expired: false,
+      id: 'issuedAt',
+      kind: 'datetime',
+      label: LABELS.issuedAt,
+      never: false,
+      value: NOW - 86_400_000,
+    })
+    assert.ok(Object.isFrozen(issued))
+    // The same moment as a deadline has passed; as a start it has not expired, whatever now says.
+    assert.equal(dateTimeField({label: LABELS.deadline, now: NOW, value: NOW - 86_400_000}).expired, true)
+    assert.equal(dateTimeField({deadline: false, label: LABELS.notBefore, now: NOW, value: 0}).expired, false)
+    assert.equal(dateTimeField({deadline: true, label: LABELS.deadline, now: NOW, value: NOW - 1}).expired, true)
+    assert.equal(dateTimeField({deadline: false, label: LABELS.notBefore, value: 'never'}).never, true)
+    assert.equal(
+      formatField(dateTimeField({deadline: false, label: LABELS.issuedAt, value: NOW - 1000})),
+      '2026-10-27T11:59:59Z'
+    )
+
+    // now is checked when given, deadline is a boolean.
+    throwsInvalid(() => dateTimeField({deadline: false, label: LABELS.issuedAt, now: Number.NaN, value: NOW}))
+    throwsInvalid(() => dateTimeField({deadline: 'no' as unknown as false, label: LABELS.issuedAt, value: NOW}))
+    throwsInvalid(() => dateTimeField({deadline: false, label: LABELS.issuedAt, value: Number.NaN}))
   })
 
   test('durations, raw bytes, percentages, numbers, booleans', () => {

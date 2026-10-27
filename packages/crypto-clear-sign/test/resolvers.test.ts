@@ -199,6 +199,54 @@ describe('createResolverContext', () => {
     assert.deepEqual(descriptors.failures(), ['descriptors'])
   })
 
+  test('fail: a failure the chain package finds itself is reported with the rest, once, in a stable order', async () => {
+    const context = createResolverContext({
+      chain: ETHEREUM,
+      ownResolvers: ['assets', 'lookupTables'],
+      resolvers: {names: {name: () => Promise.reject(new Error('offline'))}},
+    })
+    assert.deepEqual(context.warnings(), [])
+
+    context.fail('lookupTables')
+    context.fail('tokens')
+    context.fail('tokens')
+    await context.name(ROUTER)
+    context.fail('assets')
+
+    // The shared ones in the order of RESOLVER_NAMES, then the package's own in the order it declared them.
+    assert.deepEqual(context.failures(), ['tokens', 'names', 'assets', 'lookupTables'])
+    assert.deepEqual(context.warnings(), [
+      {
+        code: 'RESOLVER_FAILED',
+        message: 'A lookup failed, so some names, tokens or descriptions may be missing.',
+        params: {resolvers: 'tokens, names, assets, lookupTables'},
+        severity: 'info',
+      },
+    ])
+
+    // Without own resolvers, only the shared names.
+    const shared = createResolverContext({chain: ETHEREUM})
+    shared.fail('descriptors')
+    assert.deepEqual(shared.failures(), ['descriptors'])
+    assert.throws(
+      () => shared.fail('assets' as 'tokens'),
+      error => isClearSignError(error, 'INVALID_ARGUMENT')
+    )
+    assert.deepEqual(shared.failures(), ['descriptors'])
+  })
+
+  test('ownResolvers are distinct lowerCamel names, none of them shared', () => {
+    for (const ownResolvers of [['tokens'], ['assets', 'assets'], ['Assets'], ['look up'], [''], ['a'.repeat(33)]]) {
+      assert.throws(
+        () => createResolverContext({chain: ETHEREUM, ownResolvers}),
+        error => isClearSignError(error, 'INVALID_ARGUMENT'),
+        JSON.stringify(ownResolvers)
+      )
+    }
+
+    assert.deepEqual(createResolverContext({chain: ETHEREUM, ownResolvers: []}).failures(), [])
+  })
+
   test('a clock that answers nonsense is the caller`s mistake', () => {
     assert.throws(
       () => createResolverContext({chain: ETHEREUM, resolvers: {clock: {now: () => Number.NaN}}}),

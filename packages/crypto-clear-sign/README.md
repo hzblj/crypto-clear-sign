@@ -53,9 +53,9 @@ behind "More details"), and a `kind`:
 | `kind` | Value | Notes |
 | --- | --- | --- |
 | `amount` | `value: bigint` in base units, `decimals?`, `symbol?`, `token?`, `unlimited`, `baseUnit?` | `formatAmount` shows it exactly. No `decimals` means an unknown token: base units, and `UNKNOWN_TOKEN`. `unlimited` means show "Unlimited", never the number. `baseUnit` is a native asset's smallest unit (`wei`, `lamports`, `sat`). |
-| `address` | `value`, `name?`, `relation` | `relation`: `self` (the signer), `own` (another of the user's accounts), `contact`, `contract` (known by name), `token`, `unknown`. |
+| `address` | `value`, `name?`, `relation` | `relation`: `self` (the signer), `own` (another of the user's accounts, as the `names` resolver says, or as the chain package knows from what is signed: the signer's own token accounts, its change), `contact`, `contract` (known by name), `token`, `unknown`. |
 | `text` | `value: string` | Shown as is. Text from outside is checked for hidden characters (`HIDDEN_CHARACTERS`). |
-| `datetime` | `value?` (milliseconds, UTC), `never`, `expired` | `never` has no value; `expired` is decided by the clock when the result was made. |
+| `datetime` | `value?` (milliseconds, UTC), `never`, `expired` | `never` has no value; `expired` is decided by the clock when the result was made, for a deadline. A moment that is not one (an issue time, a "valid from") is never `expired`. |
 | `duration` | `value?` (milliseconds), `never` | |
 | `raw` | `value`: lowercase hex with `0x` | Bytes nothing decoded. |
 | `percent` | `value: number` | `0.5` is 0.5 %. |
@@ -183,7 +183,11 @@ const resolvers: Resolvers<EthereumDescriptorQuery, Erc7730Descriptor> = {
 
 Chain packages reach them through `createResolverContext`, which checks answers, caches lookups per address, reads the
 clock once, and finds an address's relation the same way on every chain: `self` for the signer, else the name
-resolver's, else `token` when the token list has it, else `unknown`.
+resolver's, else `token` when the token list has it, else `unknown`. A chain package may also mark an address `own`
+itself, from what is signed (the signer's own token accounts on Solana, a PSBT's change on Bitcoin), and report a
+failure it finds itself with `context.fail(name)`: a built-in list that stood in for a resolver that threw, or a
+resolver of its own (declared in `ownResolvers`, such as Bitcoin's `assets`) that answered nonsense. `RESOLVER_FAILED`
+then names it with the rest.
 
 ### Trust
 
@@ -232,8 +236,8 @@ A chain package's own words and codes: `defineTexts('ethereum', {label: {gasLimi
 | `amountField`, `addressField`, `textField`, `dateTimeField`, `durationField`, `rawField`, `percentField`, `numberField`, `booleanField`, `listField` | Fields, checked and compact |
 | `warning(definition, {fields, params})`, `defineWarnings`, `WARNINGS` | Warnings from definitions |
 | `text(template, params)`, `defineTexts`, `externalText`, `INTENTS`, `SUMMARIES`, `LABELS` | Words |
-| `createResolverContext(options)` | Resolvers, checked, cached, failures reported |
-| `fromUnixSeconds`, `checkDeadline`, `checkDuration`, `LONG_LIVED_AFTER` | Deadlines into `datetime` fields and `EXPIRED`/`LONG_LIVED` |
+| `createResolverContext(options)` | Resolvers, checked, cached, failures reported (`context.fail` for those the chain package finds) |
+| `fromUnixSeconds`, `checkDeadline`, `checkDuration`, `LONG_LIVED_AFTER` | Deadlines into `datetime` fields and `EXPIRED`/`LONG_LIVED`; `dateTimeField({deadline: false, value})` for a moment that is not one |
 | `maxUint(bits)` | The "unlimited" of each protocol |
 | `hasHiddenCharacters(text)` | For `HIDDEN_CHARACTERS` |
 | `maxRisk`, `compareRisk`, `actionAt`, `warningsAt`, `hasWarning`, `findField` | Reading results |

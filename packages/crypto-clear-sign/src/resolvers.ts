@@ -90,8 +90,11 @@ export const RESOLVER_NAMES = ['tokens', 'names', 'descriptors'] as const
 
 export type ResolverName = (typeof RESOLVER_NAMES)[number]
 
-/** How a chain package reaches the resolvers, the same way in every package. */
-export type ResolverContext<Query = never, Content = never> = {
+/**
+ * How a chain package reaches the resolvers, the same way in every package. `Own` names the chain package's own
+ * resolvers it reports failures of (`ownResolvers`): none unless given.
+ */
+export type ResolverContext<Query = never, Content = never, Own extends string = never> = {
   readonly chain: ChainRef
   readonly signer?: string
   /** The clock read once, in milliseconds, when the context was made: every field of one result uses the same now. */
@@ -113,20 +116,45 @@ export type ResolverContext<Query = never, Content = never> = {
   readonly amount: (
     input: FieldCommon & {readonly value: bigint; readonly token: string; readonly unlimited?: boolean}
   ) => Promise<AmountField>
-  /** The resolvers that failed so far. */
-  readonly failures: () => readonly ResolverName[]
+  /**
+   * The resolvers that failed so far, by a lookup or by `fail`: the shared ones in the order of `RESOLVER_NAMES`, then
+   * the chain package's own in the order of `ownResolvers`.
+   */
+  readonly failures: () => readonly (ResolverName | Own)[]
+  /**
+   * Reports a failure the chain package finds itself, so that `warnings()` names it: a built-in list that stood in for
+   * a resolver that threw, or a chain package's own resolver (`ownResolvers`) that threw or answered nonsense. Saying
+   * it twice says it once. A name that is neither shared nor declared is `INVALID_ARGUMENT`, a caller's mistake.
+   *
+   * ```ts
+   * const context = createResolverContext({chain, ownResolvers: ['assets'], ...options})
+   * if (!isAssetList(answer)) context.fail('assets') // RESOLVER_FAILED then names it
+   * ```
+   */
+  readonly fail: (resolver: ResolverName | Own) => void
   /** `RESOLVER_FAILED` when any resolver failed (its params name which), for the result's root; else nothing. */
   readonly warnings: () => readonly WarningInput[]
 }
 
-export type ResolverContextOptions<Query = never, Content = never> = ClearSignOptions<Query, Content> & {
+export type ResolverContextOptions<Query = never, Content = never, Own extends string = never> = ClearSignOptions<
+  Query,
+  Content
+> & {
   readonly chain: ChainRef
   /**
    * How the chain compares addresses and keys its caches: lowercase for EVM hex, the identity (the default) for
    * Base58 and Bech32.
    */
   readonly normalize?: (address: string) => string
+  /**
+   * The chain package's own resolvers (Bitcoin's `assets`, Solana's `lookupTables`), by name, so that `fail` can
+   * report them: `RESOLVER_FAILED` names them after the shared ones, in this order. lowerCamel, up to 32 characters,
+   * none of `RESOLVER_NAMES`.
+   */
+  readonly ownResolvers?: readonly Own[]
 }
+
+const OWN_RESOLVER = /^[a-z][A-Za-z0-9]{0,31}$/
 
 const readable = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max && !hasHiddenCharacters(value)
@@ -196,7 +224,8 @@ const checkDescriptor = <Content>(value: unknown): Descriptor<Content> | undefin
 
 /**
  * The resolvers of a `clearSign*` call, made safe to use: answers checked (a malformed one is a failure), failures
- * caught and remembered (`warnings()` reports them), token and name lookups cached, the clock read once.
+ * caught and remembered (`warnings()` reports them, with those the chain package reports through `fail`), token and
+ * name lookups cached, the clock read once.
  *
  * ```ts
  * const context = createResolverContext({chain, normalize: address => address.toLowerCase(), ...options})
@@ -205,9 +234,9 @@ const checkDescriptor = <Content>(value: unknown): Descriptor<Content> | undefin
  * // ...build the actions, then add context.warnings() to the root's
  * ```
  */
-export const createResolverContext = <Query = never, Content = never>(
-  options: ResolverContextOptions<Query, Content>
-): ResolverContext<Query, Content> => {
+export const createResolverContext = <Query = never, Content = never, Own extends string = never>(
+  options: ResolverContextOptions<Query, Content, Own>
+): ResolverContext<Query, Content, Own> => {
   const {chain, resolvers = {}, signer} = options
   const normalize = options.normalize ?? ((address: string) => address)
   const now = (resolvers.clock ?? systemClock).now()
@@ -216,7 +245,22 @@ export const createResolverContext = <Query = never, Content = never>(
     throw invalid('The clock answers with a moment in milliseconds.')
   }
 
-  const failed = new Set<ResolverName>()
+  const own = options.ownResolvers ?? []
+
+  if (
+    !Array.isArray(own) ||
+    new Set(own).size !== own.length ||
+    !own.every(
+      name =>
+        typeof name === 'string' && OWN_RESOLVER.test(name) && !(RESOLVER_NAMES as readonly string[]).includes(name)
+    )
+  ) {
+    throw invalid('ownResolvers are distinct lowerCamel names, none of them shared.')
+  }
+
+  // Every name a failure can be reported under, in the order RESOLVER_FAILED lists them.
+  const known: readonly (ResolverName | Own)[] = [...RESOLVER_NAMES, ...own]
+  const failed = new Set<ResolverName | Own>()
   const tokens = new Map<string, Promise<TokenInfo | undefined>>()
   const names = new Map<string, Promise<NameInfo | undefined>>()
 
@@ -259,6 +303,7 @@ export const createResolverContext = <Query = never, Content = never>(
       : cached(names, address, () => ask('names', () => resolvers.names?.name({address, chain}), checkName))
 
   const isSigner = (address: string) => signer !== undefined && normalize(address) === normalize(signer)
+  const failures = () => known.filter(resolver => failed.has(resolver))
 
   return Object.freeze({
     address: async ({value, ...common}: FieldCommon & {readonly value: string}) => {
@@ -291,19 +336,20 @@ export const createResolverContext = <Query = never, Content = never>(
       resolvers.descriptors === undefined
         ? Promise.resolve(undefined)
         : ask('descriptors', () => resolvers.descriptors?.descriptor(query), checkDescriptor<Content>),
-    failures: () => RESOLVER_NAMES.filter(resolver => failed.has(resolver)),
+    fail: (resolver: ResolverName | Own) => {
+      if (!known.includes(resolver)) {
+        throw invalid('fail names a shared resolver or one of ownResolvers.')
+      }
+
+      failed.add(resolver)
+    },
+    failures,
     isSigner,
     name,
     now,
     ...(signer === undefined ? {} : {signer}),
     token,
     warnings: () =>
-      failed.size === 0
-        ? []
-        : [
-            warning(WARNINGS.RESOLVER_FAILED, {
-              params: {resolvers: RESOLVER_NAMES.filter(resolver => failed.has(resolver)).join(', ')},
-            }),
-          ],
+      failed.size === 0 ? [] : [warning(WARNINGS.RESOLVER_FAILED, {params: {resolvers: failures().join(', ')}})],
   })
 }

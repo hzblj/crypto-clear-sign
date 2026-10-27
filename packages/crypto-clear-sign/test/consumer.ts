@@ -8,6 +8,7 @@ import {
   type ClearSignOptions,
   createClearSigning,
   createResolverContext,
+  dateTimeField,
   defineTexts,
   defineWarnings,
   type Field,
@@ -61,9 +62,24 @@ export const describeApproval = async (
     value,
   })
 
+  // A chain package's own resolver, and a moment that is not a deadline.
+  const assets = createResolverContext({chain, ownResolvers: ['assets'], resolvers})
+  assets.fail('assets')
+  assets.fail('tokens')
+  const failed: readonly ('tokens' | 'names' | 'descriptors' | 'assets')[] = assets.failures()
+  const issuedAt = dateTimeField({deadline: false, id: 'issuedAt', label: LABELS.issuedAt, value: Date.now()})
+  // @ts-expect-error: only a declared resolver can fail
+  assets.fail('lookupTables')
+  // @ts-expect-error: a deadline needs now
+  dateTimeField({id: 'deadline', label: LABELS.deadline, value: Date.now()})
+
   return createClearSigning({
     chain,
-    fields: [await context.address({id: 'spender', label: LABELS.spender, value: spender}), amount],
+    fields: [
+      await context.address({id: 'spender', label: LABELS.spender, value: spender}),
+      amount,
+      ...(failed.length > 0 ? [issuedAt] : []),
+    ],
     intent: intent === undefined ? INTENTS.approve : {code: 'external', text: intent},
     kind: 'transaction',
     source: {decoder: 'erc20', kind: 'builtin'},

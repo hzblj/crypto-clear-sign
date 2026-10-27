@@ -58,7 +58,8 @@ export type AmountField = FieldCommon & {
  * Who an address is to the signer, as far as anything here knows:
  *
  * - `self`: the account that signs.
- * - `own`: another account of the user's (the `names` resolver says so).
+ * - `own`: another account of the user's: the `names` resolver says so, or the chain package knows it from what is
+ *   signed (the signer's own token accounts, its change).
  * - `contact`: an entry of the user's address book (the `names` resolver).
  * - `contract`: a contract or program known by name (a resolver, a descriptor, or a built-in such as the System
  *   Program).
@@ -91,7 +92,10 @@ export type DateTimeField = FieldCommon & {
   readonly value?: number
   /** It never comes: the protocol's "no deadline" (as the chain package documents), or past `MAX_TIME`. */
   readonly never: boolean
-  /** Past, by the clock the result was made with (`Clock`). Always `false` when `never`. */
+  /**
+   * Past, by the clock the result was made with (`Clock`). Always `false` when `never`, and for a moment that is not
+   * a deadline (an issue time, a start: `dateTimeField`'s `deadline: false`).
+   */
   readonly expired: boolean
 }
 
@@ -403,22 +407,58 @@ export const textField = (input: Input<TextField>) =>
   checkField({...input, kind: 'text'}, 'textField', new Set()) as TextField
 
 /**
- * A moment, from milliseconds or `'never'` (`fromUnixSeconds` turns chain timestamps into either), `expired` decided
- * by `now` (the resolver context's `now()`): a moment before it has passed.
+ * What `dateTimeField` takes: the moment, and either `now` (a deadline, the default) or `deadline: false` (a moment
+ * that does not expire).
  */
-export const dateTimeField = (
-  input: FieldCommon & {readonly value: number | 'never'; readonly now: number}
-): DateTimeField => {
-  const {now, value, ...common} = input
+export type DateTimeFieldInput = FieldCommon & {readonly value: number | 'never'} & (
+    | {
+        /** The resolver context's `now`: a moment before it has passed. */
+        readonly now: number
+        /** A deadline or an expiry (the default): `expired` once it has passed. */
+        readonly deadline?: true
+      }
+    | {
+        /**
+         * Not a deadline: when something was issued, when it starts, a moment a descriptor names without saying what
+         * it means. Never `expired`, whatever the clock says.
+         */
+        readonly deadline: false
+        /** Not needed, and checked when given. */
+        readonly now?: number
+      }
+  )
 
-  if (!isTime(now)) {
+/**
+ * A moment, from milliseconds or `'never'` (`fromUnixSeconds` turns chain timestamps into either). A deadline (the
+ * default) is `expired` when it lies before `now` (the resolver context's `now`); a moment with `deadline: false` (an
+ * issue time, a "valid from") is past without having expired, and never is.
+ *
+ * ```ts
+ * dateTimeField({id: 'deadline', label: LABELS.deadline, now: context.now, value: fromUnixSeconds(deadline)})
+ * dateTimeField({deadline: false, id: 'issuedAt', label: LABELS.issuedAt, value: Date.parse(issuedAt)})
+ * ```
+ */
+export const dateTimeField = (input: DateTimeFieldInput): DateTimeField => {
+  const {deadline, now, value, ...common} = input
+
+  if (deadline !== undefined && typeof deadline !== 'boolean') {
+    throw invalid('dateTimeField.deadline is a boolean when present.')
+  }
+
+  if ((deadline !== false || now !== undefined) && !isTime(now)) {
     throw invalid('dateTimeField.now is a moment in milliseconds.')
   }
 
   return checkField(
     value === 'never'
       ? {...common, expired: false, kind: 'datetime', never: true}
-      : {...common, expired: typeof value === 'number' && value < now, kind: 'datetime', never: false, value},
+      : {
+          ...common,
+          expired: deadline !== false && typeof value === 'number' && value < (now as number),
+          kind: 'datetime',
+          never: false,
+          value,
+        },
     'dateTimeField',
     new Set()
   ) as DateTimeField
