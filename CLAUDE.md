@@ -16,8 +16,8 @@ Every package has its own `CLAUDE.md`: read that one before touching it. A chain
 | `scripts/` | | `pack-check.mjs` (packs, installs, type-checks each package's `test/consumer.ts`), `sync-versions.mjs`. |
 | `docs/` | | The chain package contract, compatibility, the decisions (`adr/`). `SECURITY.md` is at the root. |
 
-Dependencies point down: example → `@hzblj/crypto-clear-sign-<chain>` → (`@hzblj/crypto-clear-sign`, and as peers that
-chain's adapter and `@hzblj/nitro-crypto`). The core imports nothing. A package here never imports another chain's
+Dependencies point down: example → `@hzblj/crypto-clear-sign-<chain>` → (`@hzblj/crypto-clear-sign` and that chain's
+adapter, with `@hzblj/nitro-crypto` as the peer). The core imports nothing. A package here never imports another chain's
 package, never fetches, and parses nothing its adapter parses.
 
 ## Commands
@@ -42,8 +42,8 @@ one is a minor release. A chain code only for what no shared code says.
 **Resolvers are trust boundaries.** Whatever they answer is shown as fact. Chain packages reach them only through
 `createResolverContext`, which checks shapes and turns failures into `RESOLVER_FAILED`.
 
-**The engine comes from npm.** `@hzblj/nitro-crypto` and `@hzblj/crypto-<chain>` are the chain packages' peers (the
-app makes the client and passes it in) and devDependencies at the versions in each `package.json`. A change the
+**The engine comes from npm.** `@hzblj/crypto-<chain>` is a dependency of its chain package and
+`@hzblj/nitro-crypto` the peer (the app makes the client and passes it in), both devDependencies too, at the versions in each `package.json`. A change the
 packages need there is a release of nitro-crypto first. Their published `exports` have no `source` condition; the
 tests here run with `--conditions=source` and reach only this repository's sources.
 

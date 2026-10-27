@@ -9,8 +9,9 @@ in its `src/` are the API reference. [ADR 0001](adr/0001-display-model.md) says 
 - **A reader, not a decoder.** It parses with its chain's adapter (`@hzblj/crypto-<chain>`, through the chain client
   the app passes in) and describes what the adapter reads. No cryptography, no RLP, PSBT or message parser of its own
   where the adapter has one, no network, no other chain, no native code.
-- **Dependencies.** `@hzblj/crypto-clear-sign` is a dependency (`workspace:^`). `@hzblj/crypto-<chain>` `^0.3.0` and
-  `@hzblj/nitro-crypto` `^0.1.5` are peers (the app's engine makes the client) and devDependencies (the tests). An
+- **Dependencies.** `@hzblj/crypto-clear-sign` is a dependency (`workspace:^`). `@hzblj/crypto-<chain>` `^0.3.0` is a
+  dependency, as in crypto-airgap's chain packages; `@hzblj/nitro-crypto` `^0.1.5` is the peer (the app's engine makes the
+  client). Both are devDependencies too (the tests). An
   independent library a test compares against (viem, `@solana/kit`, `@scure/btc-signer`) is a devDependency pinned
   exactly, as the sibling repositories pin them.
 - **Not understanding is a result.** A call, an instruction or a script it cannot read is described as far as it can
