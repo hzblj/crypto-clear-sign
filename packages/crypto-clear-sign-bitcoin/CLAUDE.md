@@ -53,6 +53,9 @@ no native module. `@scure/btc-signer` (pinned) is a devDependency: an independen
 
 - Export its size estimate (`estimateVsize`, per input type): `src/transaction.ts` repeats its numbers.
 - Final witnesses (or their sizes) in `decodePsbt`, for an exact size of a partly finalized PSBT.
+- The redeem script (`PSBT_IN_REDEEM_SCRIPT`) in `decodePsbt`, checked against the coin's script: a P2SH coin with one
+  key named is estimated as P2SH-P2WPKH unchecked (the chain client hashes nothing here), so a P2SH-P2PK coin's fee
+  rate shows too high.
 
 Done in 0.3.1: `decodePsbt` reads a PSBT whose outputs exceed its inputs (a negative `balance`, no `fee`), so
 marketplace offers are reviewed (`bitcoin.intent.offer`) instead of refused.

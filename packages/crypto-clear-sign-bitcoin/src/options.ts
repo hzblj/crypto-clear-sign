@@ -36,7 +36,10 @@ export type BitcoinSigningAccount =
 export type BitcoinInscription = {
   /** Its id, `<txid>i<index>`, when known. */
   readonly id?: string
-  /** The sat it is on, counted from the coin's first. When absent, every sat of the coin is treated as carrying it. */
+  /**
+   * The sat it is on, counted from the coin's first. When absent, or past the coin's value (it is on the coin, at a sat
+   * the indexer misplaced), every sat of the coin is treated as carrying it.
+   */
   readonly offset?: bigint | number
 }
 

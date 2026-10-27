@@ -876,6 +876,15 @@ const rootIntent = ({
       : [BITCOIN_TEXTS.intent.selfTransfer, text(BITCOIN_TEXTS.summary.selfTransfer, {amount: btc(kept)})]
   }
 
+  // Only OP_RETURN outputs: data recorded, or bitcoin destroyed when any carries some.
+  if (actions.length > 1 && outputs.every(({role}) => role === 'data' || role === 'runestone')) {
+    const burned = sum(outputs.map(({output}) => output.value))
+
+    return burned > 0n
+      ? [BITCOIN_TEXTS.intent.burn, text(BITCOIN_TEXTS.summary.burn, {amount: btc(burned)})]
+      : [BITCOIN_TEXTS.intent.data, text(BITCOIN_TEXTS.summary.data)]
+  }
+
   const [first] = actions
 
   return actions.length === 1 && first !== undefined ? [first.intent, first.summary] : [INTENTS.unknown, undefined]

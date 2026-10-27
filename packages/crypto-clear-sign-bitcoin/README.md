@@ -69,8 +69,8 @@ Warnings:
 The payload is the PSBT's bytes, or its Base64 text. The result's `kind` is `psbt`:
 
 - **The root** says what the whole does: "Send 0.00025 BTC to bc1q…" (or "to 3 recipients"), a consolidation ("Combine
-  3 coins into 0.00059 BTC"), a transfer to yourself, a rune's etching or mint, an **offer** (a PSBT that is not
-  finished, below), or **"Sign part of a transaction"** when other wallets' coins are spent too, or when the signer's own signature leaves the transaction open
+  3 coins into 0.00059 BTC"), a transfer to yourself, a rune's etching or mint, data recorded or bitcoin destroyed
+  (when every output is `OP_RETURN`), an **offer** (a PSBT that is not finished, below), or **"Sign part of a transaction"** when other wallets' coins are spent too, or when the signer's own signature leaves the transaction open
   (NONE, SINGLE, ANYONECANPAY): others complete it. Its fields are the amount sent to others (`amount`), with others'
   coins in it what the signer's accounts put in, get back and pay (`yourCoins`, `backToYou`, `net`), the fee (`fee`),
   the fee rate (`feeRate`, sat/vB), an absolute lock time (`lockTime`), every input as a list (`input-0`, …), and,
@@ -89,8 +89,10 @@ The payload is the PSBT's bytes, or its Base64 text. The result's `kind` is `psb
   (raw).
 - **The fee** is exact; the fee rate divides it by the size: the signed transaction's when every input is signed
   and the adapter finalizes it, else an estimate from the inputs' scripts as the adapter makes its own (68 vB a
-  P2WPKH input, 57.5 a Taproot key path, 148 P2PKH, 91 P2SH-P2WPKH) and the outputs' exact sizes. An input of
-  another script (P2WSH, bare) leaves the rate out.
+  P2WPKH input, 57.5 a Taproot key path, 148 P2PKH, 91 P2SH-P2WPKH, and a quarter byte more for each legacy input's
+  empty witness beside SegWit ones) and the outputs' exact sizes. An input of another script (P2WSH, bare) leaves
+  the size and the rate out. A P2SH coin with one key named is taken as P2SH-P2WPKH: the adapter gives no redeem
+  script to check it by, and another script's larger size would make the rate shown higher than it is, never lower.
 
 ### Accounts: whose coins, and which output is change
 
@@ -157,7 +159,7 @@ const result = await clearSignPsbt(crypto.chains.bitcoin, psbt, {
 | A coin's value before them is missing | `bitcoin.ASSET_DESTINATION_UNKNOWN` (high) |
 | Only the signer's outputs | `bitcoin.ASSET_KEPT` (info) |
 
-An inscription without an `offset` counts as on every sat of its coin. Runes are followed without amounts: every
+An inscription without an `offset`, or with one past its coin's value, counts as on every sat of its coin. Runes are followed without amounts: every
 output an edict of a held rune names, and the pointer or the first output that is not `OP_RETURN`, counts (a rune
 without an `id` matches every edict). Only the signer's coins are followed (every coin, without accounts).
 
@@ -206,8 +208,8 @@ Understood by: built-in decoder (bip322)
 The payload is text or bytes, the message a BIP-322 (or, with `format: 'legacy'`, a BIP-137) signature signs, for
 `address` (the `signer` unless given). The result's `kind` is `message`: the text (`message`), the account
 (`signer`, with its relation) and the format. Text with hidden characters is `HIDDEN_CHARACTERS`; bytes that are not
-UTF-8, or decode to control characters (shown raw), and text that is only hex (16 bytes or more) are
-`BLIND_SIGNING`.
+UTF-8, or decode to control characters (any but tab and line breaks, C1 included; shown raw), and text that is only
+hex (16 bytes or more) are `BLIND_SIGNING`.
 
 A sign-in message in the form CAIP-122 (Sign-In With X) gives Bitcoin (EIP-4361's text for the `bip122` namespace:
 `example.com wants you to sign in with your Bitcoin account:`) is `intent.signIn` ("Sign in to example.com"), read into

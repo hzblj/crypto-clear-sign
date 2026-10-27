@@ -162,8 +162,8 @@ const isSigned = (input: BitcoinPsbtInput) =>
 
 /**
  * The transaction's virtual size: exact when every input is signed and the adapter finalizes it (each signature
- * verified), else estimated from the inputs' scripts and the outputs' exact sizes; `undefined` when an input's size
- * cannot be estimated.
+ * verified), else estimated from the inputs' scripts and the outputs' exact sizes, serialized as BIP-144 says (with
+ * any witness, an empty one for each legacy input); `undefined` when an input's size cannot be estimated.
  */
 export const transactionSize = (
   chain: Pick<BitcoinClearSignChain, 'finalizePsbt'>,
@@ -185,8 +185,11 @@ export const transactionSize = (
   }
 
   const witness = inputs.some(input => input?.witness)
+  // With any witness, the marker and flag (2 weight units), and an empty witness (1) for every input without one.
+  const legacy = inputs.filter(input => !input?.witness).length
   const overhead =
-    (8 + compactSizeLength(psbt.inputs.length) + compactSizeLength(psbt.outputs.length)) * 4 + (witness ? 2 : 0)
+    (8 + compactSizeLength(psbt.inputs.length) + compactSizeLength(psbt.outputs.length)) * 4 +
+    (witness ? 2 + legacy : 0)
   const outputs = psbt.outputs.reduce(
     (weight, output) => weight + (8 + compactSizeLength(output.scriptPubKey.length) + output.scriptPubKey.length) * 4,
     0

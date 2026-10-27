@@ -24,6 +24,7 @@ import {
   field,
   has,
   only,
+  opReturn,
   previousTransaction,
   rejectsWith,
   setup,
@@ -604,6 +605,74 @@ describe('clearSignPsbt: outputs worth a second look', async () => {
     assert.deepEqual([burn.severity, burn.action, burn.fields], ['critical', [0], ['amount']])
     assert.equal(actionAt(burned, [0])?.intent.code, BITCOIN_TEXTS.intent.burn.code)
     assert.equal(burned.risk, 'critical')
+  })
+})
+
+describe('clearSignPsbt: the root when no payment leads', async () => {
+  const {accounts, xpubAccounts} = await setup()
+  const {change, other, segwit} = accounts
+  const read = (outputs: Parameters<typeof btcSignerPsbt>[1], options: object = {accounts: [...xpubAccounts]}) =>
+    clearSignPsbt(chain, btcSignerPsbt([{account: segwit, previous: true, value: 100_000n}], outputs), options)
+  const data = (words: string, value = 0n) => ({script: opReturn(Buffer.from(words)), value})
+
+  test('only OP_RETURN outputs: data recorded, however many, and the whole coin is the fee', async () => {
+    const one = await read([data('hello')])
+    assert.equal(one.intent.code, BITCOIN_TEXTS.intent.data.code)
+    assert.equal(one.summary?.code, BITCOIN_TEXTS.summary.data.code)
+    assert.equal(findField(one, 'amount'), undefined)
+    const fee = field(one, 'fee')
+    assert.ok(fee.kind === 'amount' && fee.value === 100_000n)
+    assert.deepEqual(only(one, 'HIGH_FEE').fields, ['fee', 'feeRate'])
+
+    // Several records are data too (they read as intent.unknown before).
+    const two = await read([data('hello'), {script: opReturn([1, 2, 3]), value: 0n}])
+    assert.equal(two.intent.code, BITCOIN_TEXTS.intent.data.code)
+    assert.equal(two.summary?.code, BITCOIN_TEXTS.summary.data.code)
+    assert.deepEqual(
+      two.actions.map(action => action.intent.code),
+      [BITCOIN_TEXTS.intent.data.code, BITCOIN_TEXTS.intent.data.code]
+    )
+    assert.deepEqual(codes(two), ['HIGH_FEE'])
+
+    // The near case: data beside change is a transfer to yourself, as before.
+    const kept = await read([data('hello'), {account: change, value: 99_000n}])
+    assert.equal(kept.intent.code, BITCOIN_TEXTS.intent.selfTransfer.code)
+  })
+
+  test('a burn only: the root destroys what every OP_RETURN output carries', async () => {
+    const burn = await read([data('bye', 99_000n)])
+    assert.equal(burn.intent.code, BITCOIN_TEXTS.intent.burn.code)
+    assert.deepEqual(burn.summary?.params, {amount: '0.00099 BTC'})
+    assert.equal(findField(burn, 'amount'), undefined)
+    const warning = only(burn, 'bitcoin.BURN')
+    assert.deepEqual([warning.severity, warning.action, warning.fields], ['critical', [0], ['amount']])
+    assert.equal(burn.risk, 'critical')
+    assert.equal(has(burn, 'HIGH_FEE'), false)
+
+    const burns = await read([data('bye', 40_000n), data('and bye'), data('again', 59_000n)])
+    assert.equal(burns.intent.code, BITCOIN_TEXTS.intent.burn.code)
+    assert.deepEqual(burns.summary?.params, {amount: '0.00099 BTC'})
+    assert.deepEqual(
+      burns.warnings.filter(entry => entry.code === 'bitcoin.BURN').map(entry => entry.action),
+      [[0], [2]]
+    )
+  })
+
+  test('a single payment to a script with no address: a send, of an amount to a script, never a destination', async () => {
+    const bare = Uint8Array.of(33, ...other.publicKey, 0xac)
+
+    for (const options of [{accounts: [...xpubAccounts]}, {}]) {
+      const result = await read([{script: bare, value: 99_000n}], options)
+      assert.equal(result.intent.code, INTENTS.send.code)
+      assert.equal(result.summary?.code, BITCOIN_TEXTS.summary.unknownScript.code)
+      assert.deepEqual(result.summary?.params, {amount: '0.00099 BTC'})
+      const amount = field(result, 'amount')
+      assert.ok(amount.kind === 'amount' && amount.value === 99_000n)
+      const warning = only(result, 'bitcoin.NO_ADDRESS_OUTPUT')
+      assert.deepEqual([warning.severity, warning.action, warning.fields], ['high', [0], ['amount']])
+      assert.equal(has(result, 'UNKNOWN_DESTINATION'), false)
+      assert.equal(actionAt(result, [0])?.intent.code, BITCOIN_TEXTS.intent.unknownScript.code)
+    }
   })
 })
 
