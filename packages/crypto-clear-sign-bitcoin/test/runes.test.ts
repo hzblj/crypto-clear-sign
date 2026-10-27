@@ -493,6 +493,69 @@ describe('clearSignPsbt: runestones', async () => {
     assert.deepEqual(codes(result), [])
   })
 
+  test('an edict of the rune its own etching makes: amounts in the etching`s divisibility and symbol', async () => {
+    const asked: string[] = []
+    const tokens = {
+      token: ({address}: {readonly address: string}) => {
+        asked.push(address)
+
+        return dog.tokens.token({address})
+      },
+    }
+    const script = runestoneScript([
+      TAG.flags,
+      ETCHING,
+      TAG.rune,
+      runeOf('UNCOMMONGOODS'),
+      TAG.spacers,
+      128n,
+      TAG.divisibility,
+      2n,
+      TAG.symbol,
+      0x24n,
+      TAG.premine,
+      100_000n,
+      // The edicts: 0:0 is the rune this runestone etches; 840000:3 another, known to the token list.
+      TAG.body,
+      0n,
+      0n,
+      12_345n,
+      1n,
+      840_000n,
+      3n,
+      500n,
+      1n,
+    ])
+    const result = await read(script, [], {resolvers: {tokens}})
+    const action = actionAt(result, [0]) ?? result
+
+    const etched = field(action, 'edict-0-rune')
+    assert.ok(etched.kind === 'text' && etched.value === 'UNCOMMON•GOODS')
+    const amount = field(action, 'edict-0-amount')
+    assert.ok(amount.kind === 'amount')
+    assert.deepEqual([amount.value, amount.decimals, amount.symbol, amount.token], [12_345n, 2, '$', undefined])
+    const premine = field(action, 'etching-premine')
+    assert.ok(premine.kind === 'amount' && premine.decimals === 2 && premine.symbol === '$')
+    // Nobody is asked about 0:0: the etching says what it is.
+    assert.deepEqual(asked, ['840000:3'])
+    assert.deepEqual(codes(result), [])
+    assert.match(plainText(result), /Amount: 123\.45 \$/)
+
+    // The near case: without the token list, the other rune is in base units and unknown; the etched one is not.
+    const offline = await read(script)
+    assert.deepEqual(only(offline, 'UNKNOWN_TOKEN').fields, ['edict-1-amount'])
+    const own = field(actionAt(offline, [0]) ?? offline, 'edict-0-amount')
+    assert.ok(own.kind === 'amount' && own.decimals === 2)
+
+    // An etched symbol with hidden characters is flagged once, and kept off the edict's amount too.
+    const hidden = await read(
+      runestoneScript([TAG.flags, ETCHING, TAG.rune, 4n, TAG.symbol, 0x202en, TAG.body, 0n, 0n, 10n, 1n])
+    )
+    assert.deepEqual(only(hidden, 'HIDDEN_CHARACTERS').fields, ['etching-symbol'])
+    const unmarked = field(actionAt(hidden, [0]) ?? hidden, 'edict-0-amount')
+    assert.ok(unmarked.kind === 'amount' && unmarked.symbol === undefined && unmarked.decimals === 0)
+  })
+
   test('an etching whose symbol hides characters', async () => {
     const result = await read(runestoneScript([TAG.flags, ETCHING, TAG.rune, 4n, TAG.symbol, 0x202en]))
     const hidden = only(result, 'HIDDEN_CHARACTERS')

@@ -50,7 +50,7 @@
     "test": "node --conditions=source --import tsx --test 'test/**/*.test.ts'"
   },
   "dependencies": {
-    "@hzblj/crypto-bitcoin": "^0.3.0",
+    "@hzblj/crypto-bitcoin": "^0.3.1",
     "@hzblj/crypto-clear-sign": "workspace:^"
   },
   "peerDependencies": {

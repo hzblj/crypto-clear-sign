@@ -74,6 +74,39 @@ describe('clearSignMessage: text', async () => {
     assert.equal(has(words, 'BLIND_SIGNING'), false)
   })
 
+  test('bytes that are UTF-8 but control characters are signed blind; tab and line breaks are text', async () => {
+    const controls = await clearSignMessage(chain, Uint8Array.of(0x01, 0x02, 0x03), {address: segwit.address})
+    assert.equal(controls.summary?.code, SUMMARIES.blind.code)
+    assert.deepEqual(controls.source, {kind: 'unknown'})
+    const raw = field(controls, 'message')
+    assert.ok(raw.kind === 'raw' && raw.value === '0x010203')
+    const blind = only(controls, 'BLIND_SIGNING')
+    assert.deepEqual([blind.severity, blind.fields], ['high', ['message']])
+    assert.equal(has(controls, 'HIDDEN_CHARACTERS'), false)
+    assert.equal(controls.risk, 'high')
+
+    // One control among words is enough: DEL, an escape sequence, and a C1 control (U+0085, NEL) encoded in UTF-8.
+    for (const bytes of [
+      Uint8Array.of(0x68, 0x69, 0x7f),
+      new TextEncoder().encode('Hi \u001b[31mthere'),
+      Uint8Array.of(0x61, 0xc2, 0x85, 0x62),
+    ]) {
+      const result = await clearSignMessage(chain, bytes)
+      assert.deepEqual(codes(result), ['BLIND_SIGNING'], String(bytes))
+      assert.ok(field(result, 'message').kind === 'raw')
+    }
+
+    // The near case: tab, carriage return and line feed are how text is laid out.
+    const laidOut = await clearSignMessage(chain, new TextEncoder().encode('line one\r\n\tline two'))
+    const message = field(laidOut, 'message')
+    assert.ok(message.kind === 'text' && message.value === 'line one\r\n\tline two')
+    assert.deepEqual(codes(laidOut), [])
+
+    // Text the app passes as a string is words it chose to show: its controls are hidden characters, not blind bytes.
+    const typed = await clearSignMessage(chain, '\u0001\u0002\u0003')
+    assert.deepEqual(codes(typed), ['HIDDEN_CHARACTERS'])
+  })
+
   test('resolvers: a name for the account, sync or async, and RESOLVER_FAILED when they fail', async () => {
     const names = {name: () => ({name: 'Treasury', relation: 'own' as const})}
 

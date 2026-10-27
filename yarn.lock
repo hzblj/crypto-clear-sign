@@ -555,12 +555,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@hzblj/crypto-bitcoin@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@hzblj/crypto-bitcoin@npm:0.3.0"
+"@hzblj/crypto-bitcoin@npm:^0.3.1":
+  version: 0.3.1
+  resolution: "@hzblj/crypto-bitcoin@npm:0.3.1"
   peerDependencies:
     "@hzblj/nitro-crypto": ^0.1.5
-  checksum: 10c0/7ddceb1a1b5563903eb63322318b77930a9f102be7d871fb71df1790676bd4965675bc539c323abb472c4cda68769b7564b33d81daaf47d4d5f844073b91ce1b
+  checksum: 10c0/0a5cf6b2b441d53bffcbe45629e464b88e233742cb3afd5ea4344f7dc5941f8cd205dabc4fc53456e19edce30ee162b721f826731b5b2cda48f853585ed82345
   languageName: node
   linkType: hard
 
@@ -568,7 +568,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hzblj/crypto-clear-sign-bitcoin@workspace:packages/crypto-clear-sign-bitcoin"
   dependencies:
-    "@hzblj/crypto-bitcoin": "npm:^0.3.0"
+    "@hzblj/crypto-bitcoin": "npm:^0.3.1"
     "@hzblj/crypto-clear-sign": "workspace:^"
     "@hzblj/nitro-crypto": "npm:^0.1.5"
     "@scure/btc-signer": "npm:2.4.1"

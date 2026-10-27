@@ -30,12 +30,12 @@ const LABEL = BITCOIN_TEXTS.label
 /** Hex of 16 bytes or more, with or without `0x`: a hash or a blob, not words. */
 const HEX = /^(?:0x)?(?:[0-9a-f]{2}){16,}$/i
 
-/** Whether text has an ASCII control character other than tab and line breaks: bytes, not words. */
+/** Whether text has a control character (Unicode's Cc: C0, DEL and C1) other than tab and line breaks: bytes, not words. */
 const hasControls = (words: string) =>
   [...words].some(character => {
     const point = character.codePointAt(0) ?? 0
 
-    return (point < 0x20 && point !== 0x09 && point !== 0x0a && point !== 0x0d) || point === 0x7f
+    return (point < 0x20 && point !== 0x09 && point !== 0x0a && point !== 0x0d) || (point >= 0x7f && point <= 0x9f)
   })
 
 /** Bytes as the text they are, or `undefined` when they are not UTF-8 or read as control characters. */

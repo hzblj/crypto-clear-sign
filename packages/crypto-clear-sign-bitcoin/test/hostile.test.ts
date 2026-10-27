@@ -4,11 +4,11 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
-import {type ClearSigning, isClearSignError} from '@hzblj/crypto-clear-sign'
+import {type ClearSigning, type ClearSigningAction, findField, isClearSignError} from '@hzblj/crypto-clear-sign'
 
-import {clearSignMessage, clearSignPsbt} from '../src'
+import {BITCOIN_TEXTS, clearSignMessage, clearSignPsbt} from '../src'
 import {decipher} from '../src/runes'
-import {btcSignerPsbt, chain, runestoneScript, setup, utxo} from './support'
+import {btcSignerPsbt, chain, has, runestoneScript, setup, sum, utxo} from './support'
 
 /** mulberry32: the same "random" cases on every run. */
 const seeded = (seed: number) => {
@@ -176,6 +176,86 @@ describe('hostile PSBTs', async () => {
         ),
         'read'
       )
+    }
+  })
+})
+
+describe('hostile offers', async () => {
+  const {accounts, strangerFingerprint, xpubAccounts} = await setup()
+  const {change, other, receive, segwit, taproot} = accounts
+  const amountOf = (result: ClearSigningAction, id: string) => {
+    const found = findField(result, id)
+    assert.ok(found?.kind === 'amount', id)
+
+    return found.value
+  }
+
+  test('random listings read as offers that judge no fee, and as shared transactions once a buyer pays', async () => {
+    const random = seeded(10)
+    // SINGLE|ANYONECANPAY most often, then every other type, none, and some no wallet uses.
+    const types = [0x83, 0x83, 0x83, 0x81, 0x82, 0x03, 0x02, 0x01, undefined, 0x00, 0x04, 0x43]
+    const sellers = [segwit, taproot, receive]
+    const payees = [receive, change, taproot, other]
+
+    for (let round = 0; round < 80; round++) {
+      const inputs = Array.from({length: 1 + random.integer(3)}, (_, index) => ({
+        account: sellers[random.integer(sellers.length)] ?? segwit,
+        previous: random.integer(2) === 0,
+        salt: round * 8 + index + 1,
+        sighashType: types[random.integer(types.length)],
+        value: BigInt(546 + random.integer(200_000)),
+      }))
+      const outputs = Array.from({length: 1 + random.integer(4)}, () => {
+        const account = payees[random.integer(payees.length)] ?? other
+
+        return {account, noOrigin: account === other, value: BigInt(546 + random.integer(200_000))}
+      })
+      const held = sum(inputs.map(input => input.value))
+      const shortfall = held - sum(outputs.map(output => output.value)) + 1n + BigInt(random.integer(100_000))
+      const [first, ...rest] = outputs
+      const asking =
+        first === undefined || shortfall <= 0n ? outputs : [{...first, value: first.value + shortfall}, ...rest]
+      const total = sum(asking.map(output => output.value))
+      const options = {
+        ...(random.integer(4) === 0 ? {} : {accounts: [...xpubAccounts]}),
+        ...(round % 3 === 0 ? {assets: {assets: () => ({inscriptions: [{offset: random.integer(1_000)}]})}} : {}),
+        maxFee: 0n,
+        maxFeeRate: 0.01,
+      }
+
+      const listing = btcSignerPsbt(inputs, asking)
+      assert.equal(chain.decodePsbt(listing).balance, held - total)
+      assert.equal(await settles(() => clearSignPsbt(chain, listing, options)), 'read')
+      const offer = await clearSignPsbt(chain, listing, options)
+      const context = JSON.stringify({options: Object.keys(options), round})
+
+      assert.equal(offer.intent.code, BITCOIN_TEXTS.intent.offer.code, context)
+      for (const id of ['amount', 'fee', 'feeRate', 'net']) {
+        assert.equal(findField(offer, id), undefined, `${id} ${context}`)
+      }
+      assert.equal(has(offer, 'HIGH_FEE') || has(offer, 'bitcoin.UNKNOWN_FEE'), false, context)
+      assert.equal(amountOf(offer, 'yourCoins'), held, context)
+      assert.equal(amountOf(offer, 'unfunded'), total - held, context)
+      // What it asks is what its receive actions get, never more than the outputs.
+      const received = offer.actions
+        .filter(action => action.intent.code === BITCOIN_TEXTS.intent.receive.code)
+        .map(action => amountOf(action, 'amount'))
+      assert.ok(amountOf(offer, 'inReturn') <= total, context)
+      if ('accounts' in options) {
+        assert.equal(amountOf(offer, 'inReturn'), sum(received), context)
+      }
+
+      // A stranger's coin covers the shortfall and a fee: no longer an offer, and the fee is the difference.
+      const fee = BigInt(random.integer(20_000))
+      const buyer = {
+        account: {...other, fingerprint: strangerFingerprint},
+        salt: round * 8 + 7,
+        value: total - held + fee,
+      }
+      const paid = await clearSignPsbt(chain, btcSignerPsbt([...inputs, buyer], asking), options)
+      assert.notEqual(paid.intent.code, BITCOIN_TEXTS.intent.offer.code, context)
+      assert.equal(amountOf(paid, 'fee'), fee, context)
+      assert.equal(findField(paid, 'inReturn'), undefined, context)
     }
   })
 })

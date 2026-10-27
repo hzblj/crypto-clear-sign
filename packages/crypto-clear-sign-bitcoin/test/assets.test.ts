@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
-import {warningsAt} from '@hzblj/crypto-clear-sign'
+import {findField, warningsAt} from '@hzblj/crypto-clear-sign'
 
 import {type BitcoinCoinAssets, type BitcoinCoinQuery, clearSignPsbt} from '../src'
 import {btcSignerPsbt, chain, field, has, only, runestoneScript, setup} from './support'
@@ -262,6 +262,72 @@ describe('coins holding inscriptions and runes', async () => {
     })
     assert.deepEqual(only(result, 'ASSET_OWNERSHIP_TRANSFER').action, [0])
     assert.equal(warningsAt(result, [0]).length, 2)
+  })
+
+  test('a record without a coin`s key: nothing held there, and nothing failed', async () => {
+    const psbt = btcSignerPsbt(
+      [
+        {account: taproot, value: 10_000n},
+        {account: segwit, previous: true, value: 20_000n},
+      ],
+      [
+        {account: other, noOrigin: true, value: 546n},
+        {account: change, value: 28_000n},
+      ]
+    )
+    const [first] = chain.decodePsbt(psbt).inputs
+    assert.ok(first)
+
+    // Only the first coin is in the record: the second is plain bitcoin, and its absence is no failure.
+    const partial = await clearSignPsbt(chain, psbt, {
+      accounts: [...xpubAccounts],
+      assets: {[`${first.txid}:${first.vout}`]: {inscriptions: [{id: INSCRIPTION, offset: 0}]}},
+    })
+    assert.deepEqual(only(partial, 'ASSET_OWNERSHIP_TRANSFER').action, [0])
+    assert.ok(field(partial, 'input-0-inscriptions').kind === 'number')
+    assert.equal(findField(partial, 'input-1-inscriptions'), undefined)
+    assert.equal(has(partial, 'RESOLVER_FAILED'), false)
+
+    // A record of other coins (or none): the review is the one without assets.
+    const plain = await clearSignPsbt(chain, psbt, {accounts: [...xpubAccounts]})
+    for (const assets of [{}, {[`${first.txid}:7`]: {inscriptions: [{offset: 0}]}}]) {
+      const result = await clearSignPsbt(chain, psbt, {accounts: [...xpubAccounts], assets})
+      assert.deepEqual(result, plain)
+    }
+  })
+
+  test('an inscription offset past its coin`s value: on some sat of the coin, so every sat counts', async () => {
+    const offset = (value: bigint | number) =>
+      read(
+        [{account: taproot, value: 10_000n}],
+        [
+          {account: change, value: 5_000n},
+          {account: other, noOrigin: true, value: 4_000n},
+        ],
+        {0: {inscriptions: [{offset: value}]}}
+      )
+    const transfers = (result: Awaited<ReturnType<typeof offset>>) =>
+      result.warnings
+        .filter(entry => entry.code === 'ASSET_OWNERSHIP_TRANSFER')
+        .map(entry => [entry.action, entry.fields])
+
+    // Its value is 10,000 sats, the last at 9,999: from 10,000 on, the offset names none of them.
+    for (const past of [10_000n, 10_001, 2n ** 64n]) {
+      assert.deepEqual(
+        transfers(await offset(past)),
+        [
+          [[], ['input-0', 'fee']],
+          [[1], ['to']],
+        ],
+        String(past)
+      )
+    }
+
+    // The near cases: the last sat is the fee's; the first is the change's, and stays.
+    assert.deepEqual(transfers(await offset(9_999n)), [[[], ['input-0', 'fee']]])
+    const first = await offset(0)
+    assert.deepEqual(transfers(first), [])
+    assert.deepEqual(only(first, 'bitcoin.ASSET_KEPT').fields, ['input-0'])
   })
 
   test('another wallet`s coin: its assets are shown, its transfer is theirs to worry about', async () => {
