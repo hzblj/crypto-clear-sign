@@ -36,13 +36,6 @@ export const Page = ({children, onRefresh, testID}: PageProps) => {
   )
 }
 
-/** The sentence under a page's title that says what the page is about. */
-export const Lead = ({children}: {children: ReactNode}) => (
-  <RnText color="content.secondary" variant="body">
-    {children}
-  </RnText>
-)
-
 type SectionProps = {
   /** A line under the content: what to notice, or what is not supported. */
   caption?: string

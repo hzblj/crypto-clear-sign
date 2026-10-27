@@ -6,7 +6,7 @@ import {Box, Button, HStack, Island, LabeledContent, SegmentedControl, Switch, T
 import {VERSION as ENGINE_VERSION} from '@hzblj/nitro-crypto'
 import {Fragment, useState} from 'react'
 
-import {Lead, Page, RowDivider, Rows, Section} from '../../components'
+import {Page, RowDivider, Rows, Section} from '../../components'
 import {LANGUAGES} from '../../config'
 import {CHAIN_IDS, type ChainId, demoSigners} from '../../core'
 import {useDemo} from '../../hooks'
@@ -61,14 +61,7 @@ export const SettingsScreen = () => {
 
   return (
     <Page testID="settings">
-      <Lead>
-        Every gallery and the Paste tab review with these. The model is the same in every setting: only what is known
-        about the addresses and tokens, and the words, change.
-      </Lead>
-      <Section
-        caption="The address that signs on each chain, shown as You wherever it appears. The demo key is BIP-39's published test phrase; on Bitcoin its addresses bring its account keys, so change is verified by derivation. Change one to see sign-ins refused and change become a payment. Solana refuses a transaction the signer does not sign (INVALID_ARGUMENT), and every chain refuses an address it cannot read."
-        title="Signer"
-      >
+      <Section caption="Shown as You in every review. The demo key is BIP-39's test phrase." title="Signer">
         {demo.status === 'ready' ? (
           <Box gap="s12">
             {CHAIN_IDS.map(chain => (
@@ -77,10 +70,7 @@ export const SettingsScreen = () => {
           </Box>
         ) : null}
       </Section>
-      <Section
-        caption="Resolvers are the app's token list (UNI, JUP, BONK, the DOG rune) and address book (Savings, Alice, a few contracts). Built-in lists are each package's own tokens and contract names. With both off, a review says only what the bytes say: watch the risk go up."
-        title="What the app knows"
-      >
+      <Section caption="Turn both off to see a review from the bytes alone." title="What the app knows">
         <Island>
           <Rows>
             <Switch label="Resolvers" onValueChange={setResolvers} value={resolvers} />
@@ -89,10 +79,7 @@ export const SettingsScreen = () => {
           </Rows>
         </Island>
       </Section>
-      <Section
-        caption="Czech translates a few dozen codes (intents, summaries, labels, warnings) through localize, with the same params. Anything else stays English, and a descriptor's words are never translated."
-        title="Language"
-      >
+      <Section caption="Czech covers the most common codes; the rest stays English." title="Language">
         <SegmentedControl
           onChange={index => setLanguage(LANGUAGES[index]?.value ?? 'en')}
           selectedIndex={Math.max(
@@ -103,7 +90,7 @@ export const SettingsScreen = () => {
           values={LANGUAGES.map(option => option.label)}
         />
       </Section>
-      <Section caption="The packages run from this repository's source; the engine from npm." title="Versions">
+      <Section title="Versions">
         <Island>
           <Rows>
             {[
