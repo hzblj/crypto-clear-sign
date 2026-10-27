@@ -105,6 +105,7 @@ export const ETHEREUM_TEXTS = defineTexts('ethereum', {
   summary: {
     approveAll: 'Allow {operator} to transfer all your {collection}',
     decreaseAllowance: "Lower {spender}'s allowance by {amount}",
+    delegateAccount: 'Let {delegate} run code as {account}',
     increaseAllowance: 'Allow {spender} to spend {amount} more',
     lockdown: 'Revoke {count} Permit2 allowances',
     permitBatch: 'Allow {spender} to spend {count} tokens',
@@ -115,6 +116,7 @@ export const ETHEREUM_TEXTS = defineTexts('ethereum', {
     sendNftBatch: 'Send {count} kinds of {collection} to {recipient}',
     signTypedData: 'Sign {primaryType} for {domain}',
     undelegate: "Clear this account's delegation",
+    undelegateAccount: 'Clear the delegation of {account}',
     unwrap: 'Unwrap {amount}',
     upgrade: 'Replace the code of {contract} with {implementation}',
     wrap: 'Wrap {amount}',

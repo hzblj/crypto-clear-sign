@@ -11,7 +11,6 @@ import {
   type NameInfo,
   RESOLVER_NAMES,
   type ResolverContext,
-  type ResolverName,
   type Resolvers,
   type TokenInfo,
   WARNINGS,
@@ -236,40 +235,56 @@ export const createEnv = (chain: EthereumClearSignChain, options: EthereumClearS
   const chainId = chain.network.chainId
   const ref = chainRef(chainId, chain.network.name)
   const app: Resolvers<EthereumDescriptorQuery, Erc7730Descriptor> = options.resolvers ?? {}
-  const failed = new Set<ResolverName>()
   const builtins = options.builtins !== false
+
+  // The app's token list and names alone, through the core's checks: an answer that throws or makes no sense is no
+  // answer, so the built-ins answer instead, and the failure is reported (`fail`) on the context that asked.
+  const appContexts = new Map<string, ResolverContext<EthereumDescriptorQuery, Erc7730Descriptor>>()
+  const appContext = (target: ChainRef) => {
+    const known = appContexts.get(target.id)
+
+    if (known !== undefined) {
+      return known
+    }
+
+    const created = createResolverContext<EthereumDescriptorQuery, Erc7730Descriptor>({
+      chain: target,
+      normalize: lower,
+      resolvers: {
+        ...(app.names === undefined ? {} : {names: app.names}),
+        ...(app.tokens === undefined ? {} : {tokens: app.tokens}),
+      },
+    })
+    appContexts.set(target.id, created)
+
+    return created
+  }
+  const fromApp = async <Answer>(
+    target: ChainRef,
+    resolver: 'names' | 'tokens',
+    lookup: (context: ResolverContext<EthereumDescriptorQuery, Erc7730Descriptor>) => Promise<Answer | undefined>
+  ): Promise<Answer | undefined> => {
+    const context = appContext(target)
+    const answer = await lookup(context)
+
+    if (context.failures().includes(resolver)) {
+      contextFor(chainIdOf(target)).fail(resolver)
+    }
+
+    return answer
+  }
 
   const resolvers: Resolvers<EthereumDescriptorQuery, Erc7730Descriptor> = {
     ...app,
     names: {
-      name: async query => {
-        let answer: NameInfo | undefined
-
-        if (app.names !== undefined) {
-          try {
-            answer = await app.names.name(query)
-          } catch {
-            failed.add('names')
-          }
-        }
-
-        return answer ?? (builtins ? builtinName(query.chain, query.address) : undefined)
-      },
+      name: async query =>
+        (await fromApp(query.chain, 'names', context => context.name(query.address))) ??
+        (builtins ? builtinName(query.chain, query.address) : undefined),
     },
     tokens: {
-      token: async query => {
-        let answer: TokenInfo | undefined
-
-        if (app.tokens !== undefined) {
-          try {
-            answer = await app.tokens.token(query)
-          } catch {
-            failed.add('tokens')
-          }
-        }
-
-        return answer ?? (builtins ? builtinToken(query.chain, query.address) : undefined)
-      },
+      token: async query =>
+        (await fromApp(query.chain, 'tokens', context => context.token(query.address))) ??
+        (builtins ? builtinToken(query.chain, query.address) : undefined),
     },
   }
 
@@ -319,11 +334,7 @@ export const createEnv = (chain: EthereumClearSignChain, options: EthereumClearS
     options,
     ref,
     warnings: () => {
-      const all = new Set([
-        ...failed,
-        ...context.failures(),
-        ...[...others.values()].flatMap(other => other.failures()),
-      ])
+      const all = new Set([context, ...others.values()].flatMap(each => each.failures()))
 
       return all.size === 0
         ? []

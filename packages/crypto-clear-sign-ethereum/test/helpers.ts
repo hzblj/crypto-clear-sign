@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict'
 
 import {
+  actionAt,
   type ClearSigning,
   type ClearSigningAction,
   type Field,
   findField,
+  isClearSignError,
   type NameInfo,
   type TokenInfo,
   type Warning,
 } from '@hzblj/crypto-clear-sign'
-import {type EthereumChain, type EthereumTransactionRequest, ethereumAdapter} from '@hzblj/crypto-ethereum'
+import {type EthereumChain, type EthereumTransactionRequest, ethereumAdapter, type Hex} from '@hzblj/crypto-ethereum'
 import {createTestCryptoEngine} from '@hzblj/nitro-crypto/testing'
+import {encodeFunctionData, parseAbiItem} from 'viem'
+
+import {clearSignTransaction, type EthereumClearSignOptions} from '../src'
 
 const chains = new Map<number, EthereumChain<string>>()
 
@@ -107,3 +112,43 @@ export const fieldOf = <Kind extends Field['kind']>(action: ClearSigningAction, 
 
   return found as Extract<Field, {readonly kind: Kind}>
 }
+
+/** Call data for a human-readable signature, encoded by viem (an independent encoder). */
+export const encode = (signature: string, args: readonly unknown[] = []): Hex =>
+  encodeFunctionData({abi: [parseAbiItem(`function ${signature}`)], args} as never)
+
+/** Options on the fixed clock, signed by `SIGNER`, with `extra` merged (resolvers too). */
+export const options = (extra: EthereumClearSignOptions = {}): EthereumClearSignOptions => ({
+  signer: SIGNER,
+  ...extra,
+  resolvers: {clock, ...extra.resolvers},
+})
+
+/** A call on mainnet (an EIP-1559 request), described with `options(extra)`. */
+export const call = (
+  to: string,
+  data: Hex,
+  extra: EthereumClearSignOptions = {},
+  fields: Partial<EthereumTransactionRequest> = {}
+): Promise<ClearSigning> => clearSignTransaction(mainnet, request({data, to, ...fields}), options(extra))
+
+/** The action at `path`, which must be there. */
+export const at = (result: ClearSigning, path: readonly number[]): ClearSigningAction => {
+  const found = actionAt(result, path)
+  assert.ok(found, `action ${path.join('.')}`)
+
+  return found
+}
+
+/** Warnings as `[code, severity, path, fields]`, sorted: the model, not the words. */
+export const shape = (result: ClearSigning) =>
+  result.warnings
+    .map(entry => [entry.code, entry.severity, entry.action.join('.'), [...(entry.fields ?? [])].join(',')].join(' '))
+    .sort()
+
+/** Rejects with a `ClearSignError` of `code`. */
+export const rejects = (run: () => Promise<unknown>, code: Parameters<typeof isClearSignError>[1]) =>
+  assert.rejects(run, error => isClearSignError(error, code))
+
+/** Seconds from now, as a uint for call data or typed data. */
+export const inSeconds = (seconds: bigint) => NOW_SECONDS + seconds

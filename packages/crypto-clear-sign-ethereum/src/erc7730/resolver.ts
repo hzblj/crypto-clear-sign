@@ -167,8 +167,14 @@ export const createDescriptorResolver = (
   const merged = (path: string, stack: readonly string[]): Erc7730Descriptor => {
     const file = byPath.get(path)
 
-    if (file === undefined || !isRecord(file.descriptor)) {
+    if (file === undefined) {
       throw new DescriptorError('It includes a file that was not given.')
+    }
+
+    if (!isRecord(file.descriptor)) {
+      throw new DescriptorError(
+        stack.length === 0 ? 'It is not a JSON object.' : 'It includes a file that is not a JSON object.'
+      )
     }
 
     if (stack.includes(path) || stack.length > MAX_INCLUDE_DEPTH) {
@@ -197,8 +203,17 @@ export const createDescriptorResolver = (
   const failures: {path: string; reason: string}[] = []
 
   for (const [path, file] of byPath) {
+    let content: Erc7730Descriptor
+
     try {
-      const content = merged(path, [])
+      content = merged(path, [])
+    } catch (error) {
+      // Broken includes (a cycle, a file not given) are the file's own fault, whoever includes it: always reported.
+      rejected.push({path, reason: error instanceof DescriptorError ? error.message : 'It could not be read.'})
+      continue
+    }
+
+    try {
       const compiled = compileDescriptor(content)
 
       if (bindingKeys(compiled).length === 0 || (compiled.kind === 'calldata' && compiled.deployments.length === 0)) {

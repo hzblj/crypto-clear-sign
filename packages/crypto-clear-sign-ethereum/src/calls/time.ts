@@ -4,7 +4,6 @@ import {
   type DisplayText,
   dateTimeField,
   fromUnixSeconds,
-  MAX_TIME,
   WARNINGS,
   type WarningInput,
   warning,
@@ -56,4 +55,4 @@ export const pointInTime = (input: {
   readonly label: DisplayText
   readonly value: number | 'never'
   readonly secondary?: boolean
-}): DateTimeField => dateTimeField({...input, now: -MAX_TIME})
+}): DateTimeField => dateTimeField({...input, deadline: false})

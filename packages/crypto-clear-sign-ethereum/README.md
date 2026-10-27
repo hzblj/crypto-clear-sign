@@ -206,7 +206,8 @@ Notes on reading:
 critical: it still runs as the account and a flaw in it reaches everything, but the app vouches for it; one to a
 contract nobody knows stays critical. A delegation for chain id 0 is `ALL_CHAINS` at **critical**: it puts the
 account's every balance on every EVM chain behind that contract. An authorization in a transaction that another account
-signed (a sponsored one) carries neither: nothing of the signer's is at stake.
+signed (a sponsored one) carries neither: nothing of the signer's is at stake, and its summary names that account
+(`ethereum.summary.delegateAccount`), not "your account".
 
 ## Texts
 
@@ -217,9 +218,10 @@ signed (a sponsored one) carries neither: nothing of the signer's is at stake.
   `implementation`, `item` (`Item {index}`), `maxFeePerGas`, `maxPriorityFeePerGas`, `newOwner`, `operation`,
   `requestId`, `resources`, `salt`, `selector`, `signatureDeadline`, `tokenId`, `transactionType`, `value`, `version`,
   `witness`.
-- `summary`: `approveAll`, `decreaseAllowance`, `increaseAllowance`, `lockdown`, `permitBatch`, `permitTransfer`,
-  `renounceOwnership`, `revokeAll`, `sendNft`, `sendNftBatch`, `signTypedData`, `undelegate`, `unwrap`, `upgrade`,
-  `wrap`.
+- `summary`: `approveAll`, `decreaseAllowance`, `delegateAccount` and `undelegateAccount` (another account's
+  authorization, in a transaction the signer sponsors), `increaseAllowance`, `lockdown`, `permitBatch`,
+  `permitTransfer`, `renounceOwnership`, `revokeAll`, `sendNft`, `sendNftBatch`, `signTypedData`, `undelegate`,
+  `unwrap`, `upgrade`, `wrap`.
 - `unit`: `blocks`, `gas`.
 
 Shared ones it uses: `INTENTS` `approve`, `batch`, `contractCall`, `delegate`, `deploy`, `revoke`, `send`, `signIn`,
@@ -241,7 +243,7 @@ descriptor's words (intents, labels, enum values) are `external` text: shown as 
 - **`clock`**, read once per call, for deadlines.
 
 Every resolver may answer synchronously or with a promise; one that throws or answers nonsense counts as no answer,
-with `RESOLVER_FAILED`.
+with `RESOLVER_FAILED`: the built-in token list and names then answer as they would have without it.
 
 ### ERC-7730
 
@@ -331,6 +333,24 @@ What this package cannot know:
 
 [SECURITY.md](https://github.com/hzblj/crypto-clear-sign/blob/main/SECURITY.md) says what clear signing protects and
 what it does not.
+
+## How it is tested
+
+The tests run offline on the engine as WebAssembly (`@hzblj/nitro-crypto/testing`) and assert on the model: codes,
+severities, action paths, field ids and `bigint` values, with one readable `plainText` check per export.
+
+- **Independent payloads.** Call data, typed data, sign-in messages and EIP-7702 authorizations are encoded and signed
+  by viem 2.57.11, and the adapter's bytes for a transaction (an EIP-7702 one included) are viem's. ABI decoding and
+  Keccak-256 are checked against viem over random ABIs, values and mutated encodings.
+- **Real ones.** The ERC-7730 registry's own test cases replayed through the bundled descriptors, Uniswap's
+  `exactInputSingle` from mainnet alone and inside a multicall, and a signed EIP-7702 batch delegation, sent by the
+  account and sponsored.
+- **Every export** offline and with resolvers that answer at once, later, by throwing or with nonsense; every built-in
+  decoder; every warning the package raises, each with a near miss that does not raise it (a finite approval, a
+  deadline in a week, a known spender); nesting to its limit; every option out of range.
+- **ERC-7730 as hostile input:** every compile rejection, includes with cycles and `__proto__`, every field format,
+  visibility rule, group mode, slice and aligned parameter, interpolation, descriptors that do not bind or decode, and
+  the registry's descriptors mutated at random (seeded): none throws, and none takes away a warning the package raises.
 
 ## Not in this version
 

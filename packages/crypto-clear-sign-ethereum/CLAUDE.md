@@ -22,7 +22,7 @@ tests only. No native code, no network, no other chain.
 | `src/abi.ts`, `src/keccak.ts` | The ABI decoder (signatures, JSON ABIs, strict and bounded decoding) and Keccak-256 for selectors (the chain client exposes none). |
 | `src/eip712.ts`, `src/siwe.ts`, `src/known.ts`, `src/catalogs.ts` | `encodeType`; the ERC-4361 parser; tokens, Permit2, Multicall3, WETH, chain names; `ETHEREUM_WARNINGS` and `ETHEREUM_TEXTS`. |
 | `src/registry/` | The `/registry` entry: `index.ts`, and what `scripts/import-registry.mjs` writes: `descriptors/` (registry files, byte for byte), `manifest.json` (commit, paths, SHA-256), `files.ts`. Never edit those by hand: change `SELECTION` and re-import. |
-| `test/` | node:test via tsx on `@hzblj/nitro-crypto/testing`. `abi.test.ts` (Keccak and decoding against viem, fuzzing), `registry.test.ts` (the registry's own test cases, `test/vectors/registry/`, replayed), `helpers.ts`, `consumer.ts` (type-checked against the tarball). |
+| `test/` | node:test via tsx on `@hzblj/nitro-crypto/testing`, payloads built by viem. A file per export (`transaction`, `typed-data`, `message`, `authorization`), `builtins.test.ts` (every decoder, every warning and its near miss, nesting, a mainnet Uniswap swap), `resolvers.test.ts` (every export offline, sync, async, throwing, nonsense), `erc7730-compile.test.ts` (paths, compile rejections, includes, the resolver, fuzzing) and `erc7730-render.test.ts` (formats, visibility, groups, slices, interpolation, binding), `package.test.ts` (exports, codes, em dashes), `abi.test.ts` (Keccak and decoding against viem, fuzzing), `registry.test.ts` (the registry's own test cases, `test/vectors/registry/`, replayed), `helpers.ts`, `consumer.ts` (type-checked against the tarball). |
 
 ## Rules
 
@@ -43,18 +43,19 @@ tests only. No native code, no network, no other chain.
   `defineTexts('ethereum', …)`; a shared code from the core wins over a new one. Severity changes are in the README.
 - **Field ids:** fixed lowerCamel for built-ins (`spender`, `amount`, `maxFee`), `<name>-<index>` for repeated ones,
   `data.<path>` and `container.<field>` for a descriptor's, `message.<member>` for typed data nothing reads.
-- **Resolvers** only through the context `createEnv` makes (lowercase compare): the app's answer first, then the
-  built-ins (unless `builtins: false`).
+- **Resolvers** only through the context `createEnv` makes (lowercase compare): the app's answer first, checked by
+  the core, then the built-ins (unless `builtins: false`). An app resolver that throws or answers nonsense lets the
+  built-ins answer and is reported with `context.fail`. Moments that are not deadlines are `dateTimeField({deadline:
+  false})` (`pointInTime`).
 
 ## Asked of the core and the adapter
 
 - The chain client exposes no bare Keccak-256, so `src/keccak.ts` computes selectors (tested against viem). An
   `EthereumChain.keccak256` in `@hzblj/crypto-ethereum` would let it go.
-- `dateTimeField` always marks a past moment expired; points in time that are not deadlines (a sign-in's issue date,
-  a descriptor's dates) use `now: -MAX_TIME` to avoid it. A `deadline: false` option, or a constructor for moments that
-  do not expire, would say it plainly.
-- The resolver context offers no way to report a failure a chain package detects itself (the built-in token list
-  backing a failing app resolver); `createEnv` merges its own into one `RESOLVER_FAILED`. A `context.fail(resolver)`
-  would do it.
+
+## Open
+
+- The ABI decoder accepts bytes after a valid encoding, as the EVM ignores them on a direct call, and shows them
+  nowhere. Showing them raw (they matter to ERC-2771 contracts called through a forwarder) is a later decision.
 
 Docs copy has no em dashes.

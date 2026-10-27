@@ -32,7 +32,8 @@ export type AuthorizationInput = {
  * `ASSET_OWNERSHIP_TRANSFER`: critical for a delegate nothing names, high for one the `names` resolver knows (a
  * wallet's own smart account implementation). The zero address clears a delegation. Chain id 0 is `ALL_CHAINS`,
  * critical for a delegation. An authorization of another account than the signer (a sponsored one in a transaction)
- * puts nothing of the signer's at risk and carries neither. Internal.
+ * puts nothing of the signer's at risk and carries neither, and its summary names that account, not "your account".
+ * Internal.
  */
 export const describeAuthorization = async (env: Env, input: AuthorizationInput): Promise<ActionInput> => {
   const delegate = await env.address({id: 'delegate', label: ETHEREUM_TEXTS.label.delegate, value: input.address})
@@ -63,7 +64,15 @@ export const describeAuthorization = async (env: Env, input: AuthorizationInput)
     ],
     intent: clears ? ETHEREUM_TEXTS.intent.undelegate : INTENTS.delegate,
     source: {decoder: 'eip7702', kind: 'builtin'},
-    summary: clears ? text(ETHEREUM_TEXTS.summary.undelegate) : text(SUMMARIES.delegate, {delegate: shown(delegate)}),
+    // Another account's authorization is not "your account": the summary names whose it is.
+    summary:
+      others && authority[0] !== undefined
+        ? clears
+          ? text(ETHEREUM_TEXTS.summary.undelegateAccount, {account: shown(authority[0])})
+          : text(ETHEREUM_TEXTS.summary.delegateAccount, {account: shown(authority[0]), delegate: shown(delegate)})
+        : clears
+          ? text(ETHEREUM_TEXTS.summary.undelegate)
+          : text(SUMMARIES.delegate, {delegate: shown(delegate)}),
     warnings,
   }
 }
