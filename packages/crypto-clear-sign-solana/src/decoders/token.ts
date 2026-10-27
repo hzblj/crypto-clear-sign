@@ -22,7 +22,7 @@ import {
 
 import {SOLANA_TEXTS, SOLANA_WARNINGS} from '../catalogs'
 import {TOKEN_2022_PROGRAM} from '../programs'
-import {createReader, malformed, nonZeroPubkey, optionalPubkey, type Reader} from '../reader'
+import {createReader, MalformedData, malformed, nonZeroPubkey, optionalPubkey, type Reader} from '../reader'
 import {
   type AccountRef,
   createActionBuilder,
@@ -601,7 +601,8 @@ const describe = async (
         return malformed()
       }
 
-      const actions: ActionInput[] = []
+      // The whole layout first: a batch the program refuses is shown raw, and counts nothing as sent.
+      const inners: Instruction[] = []
       let first = 0
 
       while (reader.remaining() > 0) {
@@ -613,14 +614,26 @@ const describe = async (
           return malformed()
         }
 
-        const inner = {...instruction, accounts, data}
-        const innerBuild = createActionBuilder(scope, inner, build.decoder)
-        actions.push(await describe(inner, innerBuild, scope, true).catch(() => unknownAction(scope, inner)))
+        inners.push({...instruction, accounts, data})
         first += count
       }
 
-      if (actions.length === 0 || first !== instruction.accounts.length) {
+      if (inners.length === 0 || first !== instruction.accounts.length) {
         return malformed()
+      }
+
+      const actions: ActionInput[] = []
+
+      for (const inner of inners) {
+        try {
+          actions.push(await describe(inner, createActionBuilder(scope, inner, build.decoder), scope, true))
+        } catch (error) {
+          if (!(error instanceof MalformedData)) {
+            throw error
+          }
+
+          actions.push(await unknownAction(scope, inner))
+        }
       }
 
       return finish({

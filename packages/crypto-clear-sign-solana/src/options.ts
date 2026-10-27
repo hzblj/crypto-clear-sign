@@ -58,16 +58,35 @@ export const HIGH_PRIORITY_FEE = 10_000_000n
 
 const U64_MAX = (1n << 64n) - 1n
 
+/** The most addresses a lookup table holds. */
+export const MAX_TABLE_ADDRESSES = 256
+
 /** The options, checked: anything out of range is `INVALID_ARGUMENT`, naming the option, never its value. */
 export const checkOptions = (chain: SolanaClearSignChain, options: SolanaClearSignOptions) => {
   if (typeof options !== 'object' || options === null) {
     throw new ClearSignError('INVALID_ARGUMENT', 'The options are an object.')
   }
 
-  const {builtinTokens, highPriorityFee, origin, signer} = options
+  const {addressLookupTables, builtinTokens, highPriorityFee, origin, signer} = options
 
   if (signer !== undefined && !isAddress(chain, signer)) {
     throw new ClearSignError('INVALID_ARGUMENT', 'The signer is a Solana address.')
+  }
+
+  if (
+    addressLookupTables !== undefined &&
+    (typeof addressLookupTables !== 'object' ||
+      addressLookupTables === null ||
+      Array.isArray(addressLookupTables) ||
+      !Object.values(addressLookupTables).every(
+        table =>
+          Array.isArray(table) && table.length <= MAX_TABLE_ADDRESSES && table.every(entry => typeof entry === 'string')
+      ))
+  ) {
+    throw new ClearSignError(
+      'INVALID_ARGUMENT',
+      'addressLookupTables holds, by table, the addresses it holds: at most 256 strings each.'
+    )
   }
 
   if (

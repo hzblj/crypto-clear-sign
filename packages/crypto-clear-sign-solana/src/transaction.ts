@@ -27,7 +27,7 @@ import {readComputeBudget} from './decoders/compute-budget'
 import {BUILTIN_DECODERS} from './decoders/index'
 import {isAdvanceNonce} from './decoders/system'
 import {describeWithIdl} from './idl/describe'
-import {checkOptions, HIGH_PRIORITY_FEE, type SolanaClearSignOptions} from './options'
+import {checkOptions, HIGH_PRIORITY_FEE, MAX_TABLE_ADDRESSES, type SolanaClearSignOptions} from './options'
 import {
   ASSOCIATED_TOKEN_PROGRAM,
   BUILTIN_PROGRAMS,
@@ -61,8 +61,6 @@ const DEFAULT_UNITS = 200_000
 
 /** The most compute units a transaction may use, which caps any limit it asks for. */
 const MAX_UNITS = 1_400_000
-
-const MAX_TABLE_ADDRESSES = 256
 
 type Read = (tables: SolanaAddressLookupTables | undefined) => DecodedSolanaMessage
 

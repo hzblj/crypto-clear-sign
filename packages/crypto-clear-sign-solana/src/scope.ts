@@ -288,7 +288,10 @@ export const createActionBuilder = (scope: Scope, instruction: Instruction, deco
   }
 }
 
-/** An instruction nothing reads: its program, its data and accounts raw, and `UNKNOWN_CONTRACT_CALL`. */
+/**
+ * An instruction nothing reads: its program, its data and accounts raw (the signer's own token accounts as `own`, as
+ * every other action shows them), and `UNKNOWN_CONTRACT_CALL`.
+ */
 export const unknownAction = async (scope: Scope, instruction: Instruction): Promise<ActionInput> => {
   const program = await describeAddress(scope.context, instruction.programId, {id: 'program', label: LABELS.program})
   const unresolved: string[] = []
@@ -301,7 +304,7 @@ export const unknownAction = async (scope: Scope, instruction: Instruction): Pro
       unresolved.push(id)
       accounts.push(unresolvedField(account, {id, label: roleLabel(account)}))
     } else {
-      accounts.push(await describeAddress(scope.context, account.address, {id, label: roleLabel(account)}))
+      accounts.push(await describeInScope(scope, account.address, {id, label: roleLabel(account)}))
     }
   }
 

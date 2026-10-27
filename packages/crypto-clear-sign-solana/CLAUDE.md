@@ -25,7 +25,7 @@ data, Sign In With Solana text and IDLs.
 | `src/catalogs.ts` | `SOLANA_WARNINGS`, `SOLANA_TEXTS`, `SolanaWarningCode`. |
 | `src/chain.ts`, `src/options.ts`, `src/programs.ts`, `src/tokens.ts` | CAIP-2 ids and adapter errors; options and their checks; program ids and `SOLANA_PROGRAMS`; `SOLANA_TOKENS` and the token resolver it backs. |
 | `src/version.ts` | `VERSION`, synced from package.json by `scripts/sync-versions.mjs`; a test holds them equal. |
-| `test/` | node:test via tsx on `createTestCryptoEngine` (WebAssembly). `support.ts` builds messages with the adapter and converts `@solana/kit` instructions; the program tests build with the `@solana-program/*` clients (parity). `consumer.ts` is what `yarn pack:check` type-checks against the tarball. |
+| `test/` | node:test via tsx on `createTestCryptoEngine` (WebAssembly). `support.ts` builds messages with the adapter and converts `@solana/kit` instructions; the program tests build with the `@solana-program/*` clients (parity). `samples.test.ts` compares real-world transactions' whole models; `hostile.test.ts` is the seeded fuzzing (transactions, every built-in program's data by its layouts, IDLs, messages); `package.test.ts` pins the exports, the catalogs' keys and the docs. `consumer.ts` is what `yarn pack:check` type-checks against the tarball. |
 
 ## Rules
 
@@ -41,7 +41,9 @@ data, Sign In With Solana text and IDLs.
   raw action: an IDL that does not fit is ignored, not believed. Keep every bound in `IDL_LIMITS`, read own
   properties only, and keep type lookups in `Map`s.
 - **Less known means more warned.** Without a `signer`, any signing account may be the user's
-  (`mayBeUsers`); an account from a lookup table that was not given is nobody known.
+  (`mayBeUsers`); an account from a lookup table that was not given is nobody known. Signers and invoked programs are
+  never looked up: a decoder that reads accounts by role must not let a looked-up account take a signer's role (the
+  stake decoder skips one standing where an older layout has a sysvar).
 - **Codes are stable.** The chain's own warnings are `defineWarnings('solana', …)`, its texts `defineTexts('solana',
   …)`; a shared code from the core wins over a new one. Never rename one; a new one is a minor release.
 - **Resolvers go through `createResolverContext`** (addresses compare by identity: Base58 is exact), so a failing

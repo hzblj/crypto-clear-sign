@@ -55,8 +55,8 @@ export const parseTime = (value: string): number | undefined => {
 /**
  * Reads a Sign In With Solana message: `undefined` when the text is not one (its first line is not
  * `<domain> wants you to sign in with your Solana account:`), `'malformed'` when it starts as one but does not follow
- * the format (fields out of order or twice, a time that is not RFC 3339, a version other than 1, lines that belong to
- * nothing), the message otherwise. The address is not checked here.
+ * the format (a domain with user info, fields out of order or twice, a time that is not RFC 3339, a version other
+ * than 1, lines that belong to nothing), the message otherwise. The address is not checked here.
  */
 export const parseSignIn = (text: string): SignInMessage | 'malformed' | undefined => {
   const lines = text.split('\n')
@@ -69,7 +69,9 @@ export const parseSignIn = (text: string): SignInMessage | 'malformed' | undefin
   const domain = first.slice(0, -HEADER.length)
   const address = lines[1]
 
-  if (domain === '' || /\s/.test(domain) || address === undefined || address === '') {
+  // The domain is a host and an optional port (RFC 4501's dnsauthority): user info in front of a host would show one
+  // site and be another's (`app.example.com@evil.example` is evil.example).
+  if (domain === '' || /[\s@]/.test(domain) || address === undefined || address === '') {
     return 'malformed'
   }
 

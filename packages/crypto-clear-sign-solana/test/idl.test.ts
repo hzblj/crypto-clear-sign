@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict'
 import {describe, test} from 'node:test'
 
-import {isClearSignError, maxUint} from '@hzblj/crypto-clear-sign'
+import {type Field, isClearSignError, maxUint} from '@hzblj/crypto-clear-sign'
 import {base58, utf8} from '@hzblj/nitro-crypto/adapter'
 import type {Address} from '@solana/kit'
 import {getTransferSolInstruction} from '@solana-program/system'
 
-import {createIdlResolver, IDL_LIMITS, type SolanaIdl} from '../src'
+import {clearSignTransaction, createIdlResolver, IDL_LIMITS, type SolanaIdl} from '../src'
 import {snakeCase} from '../src/idl/resolver'
 import {
   address,
   addressOf,
+  chain,
   clear,
+  clock,
+  codes,
   codesAt,
+  compile,
   crypto,
   field,
   first,
@@ -530,6 +534,176 @@ describe('IDL interpreter', () => {
     }
   })
 
+  test('a program name with hidden characters is not believed: the program is shown by its address alone', async () => {
+    const result = await clear([deposit(1n)], withIdl({...IDL, metadata: {...IDL.metadata, name: 'Jupiter\u202e'}}))
+    const action = first(result)
+    const program = addressOf(action, 'program')
+
+    assert.deepEqual(action.source.kind, 'descriptor')
+    assert.equal(program.name, undefined)
+    assert.equal(program.relation, 'unknown')
+    assert.equal(action.summary?.params?.contract, PROGRAM)
+    assert.deepEqual(codesAt(result, [0]), [])
+
+    // The near miss: a name that hides nothing names the program.
+    assert.equal(addressOf(first(await clear([deposit(1n)], withIdl(IDL))), 'program').name, 'vault')
+  })
+
+  test('a resolver whose content is not an object: the call is shown raw; no content at all is RESOLVER_FAILED', async () => {
+    for (const content of [42, true, 'idl', () => IDL, new Map([['address', PROGRAM]])]) {
+      const result = await clear([deposit(1n)], withIdl(content))
+
+      assert.deepEqual(first(result).source, {kind: 'unknown'})
+      assert.deepEqual(codes(result), ['UNKNOWN_CONTRACT_CALL'])
+    }
+
+    const empty = await clear([deposit(1n)], withIdl(undefined))
+    assert.equal(warningOf(empty, 'RESOLVER_FAILED').params?.resolvers, 'descriptors')
+    assert.deepEqual(codesAt(empty, [0]), ['UNKNOWN_CONTRACT_CALL'])
+  })
+
+  test('nesting as deep as IDL_LIMITS allows keeps field ids within the model`s 128 characters; one more is not read', async () => {
+    // Vectors in vectors, each of 11 items, the last one going deeper: ids grow by `.10` a level. Within the limits on
+    // depth (32) and values (1,024), no path makes an id past 128 characters: `arg-0` and 32 levels of `.10` is 101.
+    const nested = (levels: number): unknown => (levels === 0 ? 'bool' : {vec: nested(levels - 1)})
+    const data = (levels: number): number[] =>
+      levels === 1
+        ? [...b.u32(11), ...new Array(11).fill(1)]
+        : [...b.u32(11), ...new Array(10).fill([0, 0, 0, 0]).flat(), ...data(levels - 1)]
+    const one = (levels: number) => ({
+      address: PROGRAM,
+      instructions: [{accounts: [], args: [{name: 'deep', type: nested(levels)}], discriminator: [7], name: 'deep'}],
+    })
+    const deepest = IDL_LIMITS.typeDepth
+    const result = await clear([raw(PROGRAM, [], [7, ...data(deepest)])], withIdl(one(deepest)))
+    const action = first(result)
+    const id = `arg-0${'.10'.repeat(deepest)}`
+
+    assert.deepEqual(action.source.kind, 'descriptor')
+    assert.equal(id.length, 101)
+    assert.equal(field(action, id, 'boolean').value, true)
+
+    const ids: string[] = []
+    const collect = (fields: readonly Field[]) => {
+      for (const entry of fields) {
+        ids.push(entry.id ?? '')
+        if (entry.kind === 'list') {
+          collect(entry.items)
+        }
+      }
+    }
+    collect(action.fields)
+    assert.ok(ids.every(entry => entry.length <= 128))
+
+    await ignored([raw(PROGRAM, [], [7, ...data(deepest + 1)])], one(deepest + 1))
+  })
+
+  test('floats that are not numbers are shown as text: an f32 NaN, an f64 infinity; finite ones as numbers', async () => {
+    const idl = {
+      address: PROGRAM,
+      instructions: [
+        {
+          accounts: [],
+          args: [
+            {name: 'nan', type: 'f32'},
+            {name: 'infinite', type: 'f64'},
+            {name: 'finite', type: 'f32'},
+          ],
+          discriminator: [7],
+          name: 'floats',
+        },
+      ],
+    }
+    const result = await clear(
+      [raw(PROGRAM, [], [7, ...b.f32(Number.NaN), ...b.f64(-Infinity), ...b.f32(0.5)])],
+      withIdl(idl)
+    )
+    const action = first(result)
+
+    assert.equal(field(action, 'arg-0', 'text').value, 'NaN')
+    assert.equal(field(action, 'arg-1', 'text').value, '-Infinity')
+    assert.equal(field(action, 'arg-2', 'number').value, 0.5)
+    assert.deepEqual(codes(result), [])
+  })
+
+  test('HIDDEN_CHARACTERS in an enum variant`s name, unit or with fields; none in a plain one', async () => {
+    const idl = {
+      address: PROGRAM,
+      instructions: [
+        {
+          accounts: [],
+          args: [
+            {name: 'plain', type: {defined: {name: 'Choice'}}},
+            {name: 'unit', type: {defined: {name: 'Choice'}}},
+            {name: 'fields', type: {defined: {name: 'Choice'}}},
+          ],
+          discriminator: [7],
+          name: 'choose',
+        },
+      ],
+      types: [
+        {
+          name: 'Choice',
+          type: {
+            kind: 'enum',
+            variants: [{name: 'Keep'}, {name: 'Sell\u200bAll'}, {fields: ['u8'], name: 'Send\u2066'}],
+          },
+        },
+      ],
+    }
+    const result = await clear([raw(PROGRAM, [], [7, 0, 1, 2, 9])], withIdl(idl))
+    const action = first(result)
+
+    assert.equal(field(action, 'arg-0', 'text').value, 'Keep')
+    assert.equal(field(action, 'arg-1', 'text').value, 'Sell\u200bAll')
+    assert.equal(field(action, 'arg-2.variant', 'text').value, 'Send\u2066')
+    assert.equal(field(action, 'arg-2.0', 'number').value, 9)
+    assert.deepEqual(
+      result.warnings.map(entry => [entry.code, entry.fields]),
+      [
+        ['HIDDEN_CHARACTERS', ['arg-1']],
+        ['HIDDEN_CHARACTERS', ['arg-2.variant']],
+      ]
+    )
+  })
+
+  test('UNRESOLVED_LOOKUPS in an instruction an IDL describes: on the IDL`s account and on those past it', async () => {
+    const table = address(73)
+    const tables = {[table]: [VAULT, STRANGER]}
+    const message = compile(
+      [
+        deposit(2n, [
+          [WALLET, 'sw'],
+          [VAULT, 'w'],
+          [SYSTEM, ''],
+          [STRANGER, ''],
+        ]),
+      ],
+      {tables, version: 0}
+    )
+    const options = {...withIdl(IDL), signer: WALLET}
+    const unresolved = await clearSignTransaction(
+      chain,
+      {message},
+      {...options, resolvers: {...options.resolvers, clock}}
+    )
+    const action = first(unresolved)
+    const raised = warningOf(unresolved, 'solana.UNRESOLVED_LOOKUPS')
+
+    assert.equal(action.source.kind, 'descriptor')
+    assert.deepEqual(field(action, 'account-1', 'list').label, {code: 'external', text: 'vault'})
+    assert.equal(field(action, 'account-1.lookupIndex', 'number').value, 0)
+    assert.equal(field(action, 'account-3.lookupIndex', 'number').value, 1)
+    assert.deepEqual(raised.action, [0])
+    assert.deepEqual(raised.fields, ['account-1', 'account-3'])
+    assert.equal(unresolved.risk, 'medium')
+
+    // The near miss: with the table, the same accounts by name, and nothing unresolved.
+    const resolved = await clearSignTransaction(chain, {message}, {...options, addressLookupTables: tables})
+    assert.equal(addressOf(first(resolved), 'account-1').value, VAULT)
+    assert.deepEqual(codes(resolved), [])
+  })
+
   test('built-in programs are never described by a descriptor: an IDL cannot rename a transfer', async () => {
     const lie = {
       address: SYSTEM,
@@ -638,6 +812,69 @@ describe('createIdlResolver', () => {
     assert.equal(field(action, 'arg-1', 'text').value, 'Ask')
     assert.equal(addressOf(action, 'account-1').label.text, 'mintAccount')
     assert.equal(addressOf(action, 'program').name, 'legacy_vault')
+  })
+
+  test('a sha256 that answers with anything but 32 bytes is INVALID_ARGUMENT; the real one is not', () => {
+    const legacy = {
+      instructions: [{accounts: [], args: [], name: 'initialize'}],
+      metadata: {address: PROGRAM},
+    } as unknown as SolanaIdl
+    const refused = (sha256: (data: Uint8Array) => Uint8Array) =>
+      assert.throws(
+        () => createIdlResolver([legacy], {sha256}),
+        error => isClearSignError(error, 'INVALID_ARGUMENT')
+      )
+
+    refused(() => new Uint8Array(31))
+    refused(() => new Uint8Array(33))
+    refused(() => new Uint8Array())
+    refused(() => Array.from({length: 32}, () => 0) as unknown as Uint8Array)
+    refused(() => 'digest' as unknown as Uint8Array)
+    assert.doesNotThrow(() => createIdlResolver([legacy], {sha256: crypto.hash.sha256}))
+  })
+
+  test('a pre-0.30 IDL with some discriminators given: those are kept, the rest computed, both read', async () => {
+    const mixed = {
+      instructions: [
+        {
+          accounts: [{isMut: true, isSigner: true, name: 'authority'}],
+          args: [{name: 'amount', type: 'u64'}],
+          name: 'stake',
+        },
+        {accounts: [], args: [{name: 'flag', type: 'bool'}], discriminator: [42], name: 'custom'},
+      ],
+      metadata: {address: PROGRAM},
+      name: 'mixed',
+    } as unknown as SolanaIdl
+    const sha = (text: string) => [...crypto.hash.sha256(utf8.encode(text)).subarray(0, 8)]
+
+    // Without sha256, the one that has no discriminator cannot be read: refused.
+    assert.throws(
+      () => createIdlResolver([mixed]),
+      error => isClearSignError(error, 'INVALID_ARGUMENT')
+    )
+
+    const descriptors = createIdlResolver([mixed], {sha256: crypto.hash.sha256})
+    const content = (
+      await descriptors.descriptor({chain: {family: 'solana', id: 'solana:x', name: ''}, programId: PROGRAM})
+    )?.content
+    assert.deepEqual(
+      content?.instructions.map(instruction => instruction.discriminator),
+      [sha('global:stake'), [42]]
+    )
+
+    const result = await clear(
+      [raw(PROGRAM, [[WALLET, 'sw']], [...sha('global:stake'), ...b.u64(5n)]), raw(PROGRAM, [], [42, 1])],
+      {resolvers: {descriptors}}
+    )
+    const [staked, custom] = result.actions
+
+    assert.ok(staked && custom)
+    assert.equal(staked.intent.text, 'stake')
+    assert.equal(field(staked, 'arg-0', 'number').value, 5n)
+    assert.equal(custom.intent.text, 'custom')
+    assert.equal(field(custom, 'arg-0', 'boolean').value, true)
+    assert.deepEqual(codes(result), [])
   })
 
   test('snake_case as Anchor before 0.30 wrote it', () => {

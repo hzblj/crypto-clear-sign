@@ -160,6 +160,19 @@ describe('clearSignMessage: text and bytes', () => {
     )
   })
 
+  test('empty bytes and empty text are an empty message: nothing hidden, nothing blind', async () => {
+    for (const empty of [new Uint8Array(), '']) {
+      const result = await sign(empty)
+
+      assert.equal(result.kind, 'message')
+      assert.deepEqual(result.source, {decoder: 'text', kind: 'builtin'})
+      assert.equal(result.intent.code, 'intent.signMessage')
+      assert.equal(field(result, 'message', 'text').value, '')
+      assert.deepEqual(codes(result), [])
+      assert.equal(result.risk, 'none')
+    }
+  })
+
   test('plainText reads it', async () => {
     assert.match(
       plainText(await sign('Hello')),
@@ -226,6 +239,37 @@ describe('clearSignMessage: Sign In With Solana', () => {
       )
     )
     assert.deepEqual(codes(await sign(signIn({domain: 'localhost:3000'}), {origin: 'http://localhost:3000'})), [])
+  })
+
+  test('an origin with user info is compared by its host; user info in front of another host is that host', async () => {
+    for (const origin of ['https://alice@example.com', 'https://alice:secret@example.com:443', 'alice@example.com']) {
+      assert.deepEqual(codes(await sign(signIn(FULL), {origin})), [], origin)
+    }
+
+    const phished = await sign(signIn(FULL), {origin: 'https://example.com@evil.example'})
+    assert.deepEqual(warningOf(phished, 'solana.SIGN_IN_DOMAIN_MISMATCH').fields, ['domain'])
+  })
+
+  test('a domain with user info is no sign-in message: it would show one site and be another`s', async () => {
+    const result = await sign(signIn({...FULL, domain: 'example.com@evil.example'}), {origin: 'https://evil.example'})
+
+    assert.equal(result.intent.code, 'intent.signMessage')
+    assert.deepEqual(result.source, {decoder: 'text', kind: 'builtin'})
+    assert.deepEqual(warningOf(result, 'solana.SIGN_IN_MALFORMED').fields, ['message'])
+  })
+
+  test('HIDDEN_CHARACTERS in a resource, on that resource; none in plain ones', async () => {
+    const result = await sign(signIn({...FULL, resources: ['https://example.com/terms', 'https://example.com/​pay']}))
+    const raised = warningOf(result, 'HIDDEN_CHARACTERS')
+
+    assert.equal(result.intent.code, 'intent.signIn')
+    assert.deepEqual(raised.fields, ['resource-1'])
+    assert.equal(raised.severity, 'medium')
+    assert.deepEqual(
+      field(result, 'resources', 'list').items.map(item => item.id),
+      ['resource-0', 'resource-1']
+    )
+    assert.deepEqual(codes(await sign(signIn(FULL))), [])
   })
 
   test('SIGN_IN_ADDRESS_MISMATCH: another account than the one signing; not without a signer', async () => {
@@ -319,6 +363,35 @@ describe('clearSignMessage: off-chain messages', () => {
     assert.equal(field(result, 'offchainVersion', 'number').value, 0)
     assert.equal(field(result, 'signers', 'list').items.length, 1)
     assert.deepEqual(codes(result), [])
+  })
+
+  test('version 0 in extended UTF-8: text past what a hardware wallet shows, its hidden characters warned about', async () => {
+    const applicationDomain = address(80)
+    const short = await sign(
+      chain.encodeOffchainMessage({applicationDomain, signers: [WALLET], text: 'Ünïcödé', version: 0})
+    )
+    assert.equal(field(short, 'format', 'text').value, 'limited-utf8')
+
+    const long = `${'Terms. '.repeat(200)}Ünïcödé`
+    const plain = await sign(
+      chain.encodeOffchainMessage({applicationDomain, signers: [WALLET], text: long, version: 0})
+    )
+
+    assert.equal(plain.kind, 'offchain-message')
+    assert.equal(field(plain, 'format', 'text').value, 'extended-utf8')
+    assert.equal(field(plain, 'message', 'text').value, long)
+    assert.equal(addressOf(plain, 'applicationDomain').value, applicationDomain)
+    assert.deepEqual(codes(plain), [])
+
+    const hiding = `${long}‮gnp.exe`
+    const hidden = await sign(
+      chain.encodeOffchainMessage({applicationDomain, signers: [WALLET], text: hiding, version: 0})
+    )
+    const raised = warningOf(hidden, 'HIDDEN_CHARACTERS')
+
+    assert.equal(field(hidden, 'format', 'text').value, 'extended-utf8')
+    assert.deepEqual(raised.fields, ['message'])
+    assert.equal(hidden.risk, 'medium')
   })
 
   test('version 1, and OTHER_SIGNERS when others must sign too', async () => {
