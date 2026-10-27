@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NDK_VERSION: 27.1.12297006
+
 jobs:
   check:
     name: Lint, typecheck, test, pack check
@@ -36,10 +39,71 @@ jobs:
         run: yarn typecheck
 
       # The core on its own, and each chain package on @hzblj/nitro-crypto's engine compiled to WebAssembly (its
-      # `testing` entry) with that chain's adapter from npm.
+      # `testing` entry) with that chain's adapter from npm; the example's samples through all four, on the same engine.
       - name: Test
         run: yarn test
 
       # All four packages: @hzblj/crypto-clear-sign and its -ethereum, -solana and -bitcoin packages.
       - name: Pack check
         run: yarn pack:check
+
+  android:
+    name: Android build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install the NDK
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" > /dev/null
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Prebuild the example
+        run: yarn workspace crypto-clear-sign-example expo prebuild --platform android --no-install
+
+      - name: Build the example
+        working-directory: apps/example/android
+        run: ./gradlew :app:assembleDebug --console=plain
+
+  ios:
+    name: iOS build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Prebuild the example
+        run: yarn workspace crypto-clear-sign-example expo prebuild --platform ios
+
+      - name: Build the example for the simulator
+        working-directory: apps/example/ios
+        run: >
+          xcodebuild -workspace ClearSignExample.xcworkspace -scheme ClearSignExample -configuration Debug
+          -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build

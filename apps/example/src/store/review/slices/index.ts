@@ -1,0 +1,1 @@
+export {pasteSlice} from './paste'
