@@ -15,7 +15,7 @@ no network.
 | [`@hzblj/crypto-clear-sign`](./packages/crypto-clear-sign/README.md) | The display model every chain package returns and every UI renders, its helpers (exact amounts, translations, plain text), the shared warning codes, and the resolver interfaces. No dependencies; installs alone. |
 | [`@hzblj/crypto-clear-sign-ethereum`](./packages/crypto-clear-sign-ethereum/README.md) | Transactions of every type, EIP-712 typed data, personal messages with Sign-In with Ethereum, and EIP-7702 authorizations; built-in decoders for the standard calls, ERC-7730 descriptors, and a bundled set from the registry. |
 | [`@hzblj/crypto-clear-sign-solana`](./packages/crypto-clear-sign-solana/README.md) | Legacy and v0 transactions, messages and off-chain messages; IDLs. |
-| [`@hzblj/crypto-clear-sign-bitcoin`](./packages/crypto-clear-sign-bitcoin/README.md) | PSBTs (P2WPKH and Taproot) and messages. |
+| [`@hzblj/crypto-clear-sign-bitcoin`](./packages/crypto-clear-sign-bitcoin/README.md) | PSBTs (P2WPKH and Taproot), with runestones and the inscriptions and runes of the signer's coins; messages (BIP-322, legacy, CAIP-122 sign-in). |
 
 ```sh
 npx expo install @hzblj/crypto-clear-sign @hzblj/crypto-clear-sign-ethereum @hzblj/crypto-ethereum @hzblj/nitro-crypto react-native-nitro-modules

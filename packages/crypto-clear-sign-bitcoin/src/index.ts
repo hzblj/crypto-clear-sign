@@ -1,3 +1,16 @@
-// Bitcoin clear signing: `clearSignPsbt`, `clearSignMessage` go here, as docs/chain-package-contract.md says, each taking the
-// chain client (`BitcoinChain`) and the core's `ClearSignOptions`, and returning the core's `ClearSigning`.
+export {BITCOIN_TEXTS, BITCOIN_WARNINGS, type BitcoinWarningCode} from './catalogs'
+export {BITCOIN_CHAIN_IDS, type BitcoinTestnet} from './chain'
+export {clearSignMessage} from './message'
+export type {
+  BitcoinAssetResolver,
+  BitcoinClearSignChain,
+  BitcoinClearSignOptions,
+  BitcoinCoinAssets,
+  BitcoinCoinQuery,
+  BitcoinInscription,
+  BitcoinMessageFormat,
+  BitcoinRuneBalance,
+  BitcoinSigningAccount,
+} from './options'
+export {clearSignPsbt, DEFAULT_MAX_FEE, DEFAULT_MAX_FEE_PERCENT, DEFAULT_MAX_FEE_RATE} from './psbt'
 export {VERSION} from './version'
