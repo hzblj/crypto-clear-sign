@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The clear signing packages' TypeScript source, as Metro runs it (metro.config.js maps their `source` exports), so
+    // the example type-checks against them without a build. @hzblj/nitro-crypto and the chain adapters come from npm.
+    "paths": {
+      "@hzblj/crypto-clear-sign": ["../../packages/crypto-clear-sign/src/index.ts"],
+      "@hzblj/crypto-clear-sign-bitcoin": ["../../packages/crypto-clear-sign-bitcoin/src/index.ts"],
+      "@hzblj/crypto-clear-sign-ethereum": ["../../packages/crypto-clear-sign-ethereum/src/index.ts"],
+      "@hzblj/crypto-clear-sign-ethereum/registry": ["../../packages/crypto-clear-sign-ethereum/src/registry/index.ts"],
+      "@hzblj/crypto-clear-sign-solana": ["../../packages/crypto-clear-sign-solana/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "native-icons.d.ts"],
+  "exclude": ["test"]
+}
