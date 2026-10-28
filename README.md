@@ -11,7 +11,7 @@ fields, actions, warnings with stable codes, risk), and your UI renders it.
 | Package | What it is |
 | --- | --- |
 | [`@hzblj/crypto-clear-sign`](./packages/crypto-clear-sign/README.md) | The display model, its helpers (exact amounts, translations, plain text), the shared warning codes, the resolver interfaces. No dependencies. |
-| [`@hzblj/crypto-clear-sign-ethereum`](./packages/crypto-clear-sign-ethereum/README.md) | Transactions of every type, EIP-712 typed data, personal messages with Sign-In with Ethereum, EIP-7702 authorizations; ERC-7730 descriptors. |
+| [`@hzblj/crypto-clear-sign-ethereum`](./packages/crypto-clear-sign-ethereum/README.md) | Transactions of every type, EIP-712 typed data, personal messages with Sign-In with Ethereum, EIP-7702 authorizations; ERC-7730 descriptors, bundled or online, rendered by [`@ethereum-sourcify/clear-signing`](https://github.com/sourcifyeth/clear-signing). |
 | [`@hzblj/crypto-clear-sign-solana`](./packages/crypto-clear-sign-solana/README.md) | Legacy and v0 transactions, messages and off-chain messages; IDLs. |
 | [`@hzblj/crypto-clear-sign-bitcoin`](./packages/crypto-clear-sign-bitcoin/README.md) | PSBTs (P2WPKH and Taproot) with inscriptions and runes; messages (BIP-322, legacy, CAIP-122 sign-in). |
 

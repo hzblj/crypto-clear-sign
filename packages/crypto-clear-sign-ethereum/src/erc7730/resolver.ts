@@ -133,7 +133,7 @@ const domainFits = (binding: Binding, query: Extract<EthereumDescriptorQuery, {k
 
 /**
  * A `descriptors` resolver from ERC-7730 files: each file's `includes` merged from the files given (resolved against
- * its `path`, never fetched), checked and compiled, and indexed by what it binds to (a contract's deployments and
+ * its `path`, never fetched), its binding checked, and indexed by what it binds to (a contract's deployments and
  * selectors, a message's domain and type). A later file wins over an earlier one for the same deployment and function
  * or message type, so an app's own descriptors listed after a registry's override or extend them:
  *

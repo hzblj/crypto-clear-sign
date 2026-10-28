@@ -464,7 +464,7 @@ describe('ERC-7730 addresses and amounts', () => {
     assert.deepEqual(at(result, [0]).source, {decoder: 'erc20', kind: 'builtin'})
     assert.equal(at(result, [0]).intent.code, 'intent.send')
     assert.deepEqual(shape(result), ['UNKNOWN_DESTINATION low 0 recipient'])
-    // Nothing of the call data is left uncovered.
+    // The call data is the action: no field shows it again.
     assert.ok(!result.fields.some(entry => entry.id?.startsWith('data.')))
 
     // Ether sent along with a call that takes none.

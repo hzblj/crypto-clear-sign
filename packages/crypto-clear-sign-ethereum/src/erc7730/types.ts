@@ -1,7 +1,8 @@
 /**
- * An ERC-7730 descriptor: the JSON of a clear signing metadata file, as the registry publishes it (version 1 or 2 of
- * the schema). Typed loosely on purpose: a descriptor is untrusted input, and the package checks every key it reads
- * before it believes it. `includes` must be merged before a resolver answers with it (`createDescriptorResolver` does).
+ * An ERC-7730 descriptor: the JSON of a clear signing metadata file, as the registry publishes it (version 2 of the
+ * schema), rendered by `@ethereum-sourcify/clear-signing`. Typed loosely on purpose: a descriptor is untrusted input;
+ * the package checks what binds it, the reference implementation the rest, and one that does not hold is not used.
+ * `includes` must be merged before a resolver answers with it (`createDescriptorResolver` does).
  *
  * ```json
  * {
@@ -15,10 +16,10 @@ export type Erc7730Descriptor = {
   readonly $schema?: string
   /** A file to merge under this one: resolved by `createDescriptorResolver`, never fetched. */
   readonly includes?: string | readonly string[]
-  /** What the descriptor binds to: `contract` (deployments, a version 1 ABI) or `eip712` (domain, deployments). */
+  /** What the descriptor binds to: `contract` (deployments) or `eip712` (deployments, domain, domain separator). */
   readonly context?: Readonly<Record<string, unknown>>
   /** `owner`, `contractName`, `info`, `token`, `constants`, `enums`, `maps`. */
   readonly metadata?: Readonly<Record<string, unknown>>
-  /** `formats` by function signature, selector, `encodeType` or primary type, and shared `definitions`. */
+  /** `formats` by function signature or EIP-712 `encodeType`, and shared `definitions`. */
   readonly display?: Readonly<Record<string, unknown>>
 }
