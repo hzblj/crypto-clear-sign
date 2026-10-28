@@ -3,7 +3,8 @@
 Solana clear signing: legacy and v0 transactions (wire bytes or bare messages), text, Sign In With Solana and
 off-chain messages, read through the chain client of `@hzblj/crypto-solana` into `@hzblj/crypto-clear-sign`'s
 `ClearSigning`. [`docs/chain-package-contract.md`](../../docs/chain-package-contract.md) is the shape of every export,
-the naming, the codes, the tests and the README; the README here is the package's reference.
+the naming, the codes, the tests and the README; the README is the user documentation, kept short, and the JSDoc in
+`src/` the reference.
 
 TypeScript over `@hzblj/crypto-clear-sign` (a dependency, `workspace:^`) and `@hzblj/crypto-solana` (a dependency,
 `^0.3.0`, as `crypto-airgap-solana` has it; the app still makes the client and passes it in). `@hzblj/nitro-crypto` is
@@ -46,6 +47,11 @@ data, Sign In With Solana text and IDLs.
   stake decoder skips one standing where an older layout has a sysvar).
 - **Codes are stable.** The chain's own warnings are `defineWarnings('solana', …)`, its texts `defineTexts('solana',
   …)`; a shared code from the core wins over a new one. Never rename one; a new one is a minor release.
+- **The root's field ids are API** (warnings point at them): `sent` (what the built-in decoders read leaving the
+  wallet, a floor and never a simulation), `feePayer`, `fee`, `priorityFee`, `signers`, `recentBlockhash` or
+  `nonceAccount`, `nonce`, `expiry`, and secondary `computeUnitLimit`, `computeUnitPrice`, `version`,
+  `lookupTables`. Its intent is the one instruction that is not set-up (compute budget, memo, token account creation,
+  the nonce's advance), else `intent.batch`.
 - **Resolvers go through `createResolverContext`** (addresses compare by identity: Base58 is exact), so a failing
   resolver becomes `RESOLVER_FAILED`, never a crash. The lookup table resolver is this package's own; its failure is
   merged into the same `RESOLVER_FAILED` (`params.resolvers` includes `lookupTables`).

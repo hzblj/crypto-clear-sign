@@ -11,7 +11,7 @@ from npm.
 | `app/(tabs)/` | Native tabs (`Tabs` from `@hzblj/kara-ui/router`), each a stack with a large title: Ethereum, Solana, Bitcoin (each `index`, the gallery, and `[sample]`, its review), Paste (`index`, `review`), Settings. `app/index.tsx` redirects to `/ethereum`. Route files only re-export a screen from `src/`. |
 | `src/features/` | One folder per area, each a screen and what only it uses, behind an `index.ts`: `gallery` (a chain's samples with their risk, pull to refresh), `review` (a sample's review with "Open in Paste", and the pasted one's), `paste` (chain, kind, format, the text, the site asking, "Try" chips from the samples), `settings`. |
 | `src/components/clear-signing/` | **The reusable review**, written to be copied into a wallet: `ClearSigningView` (the whole review from a `ClearSigning`), `RiskBadge` and `RISK_TONES`, `WarningList` (by severity, each with its action and the labels of its fields), `FieldList` and `FieldRow` (every field kind; `flagsOf` marks fields a warning names), `ActionTree`, `SourceLine`, `RawSection`, `PlainTextView`, `RelationBadge`, `Disclosure`. They import only `@hzblj/crypto-clear-sign`, kara and their siblings in `components/`. |
-| `src/components/` | Shared UI besides: `Page`, `Section`, `Rows`, `Card`, `Lead`, `Notice`, `Pill`, `TabStack`, `CopyProvider`. |
+| `src/components/` | Shared UI besides: `Page`, `Section`, `Rows`, `Card`, `Notice`, `Pill`, `TabStack`, `CopyProvider`. |
 | `src/core/` | Everything that is not UI, and what the tests run: `chains.ts` (the adapters on Ethereum mainnet, Solana mainnet-beta and Bitcoin mainnet; the demo key's accounts and strangers' addresses), `engine.ts` (the native engine and the demo accounts, once per run), `directory.ts` (the app's token list and address book), `options.ts` (settings into each chain's options, the bundled ERC-7730 registry), `review.ts` (`ReviewRequest`, and `review`: one request through its chain package), `paste.ts` (text into a request, a request back into text), `samples/` (one file per chain, `abi.ts` and `psbt.ts` to write call data and PSBTs, `runSample`). |
 | `src/store/` | Zustand stores in the `core-store` pattern: `persist(immer(...))`, a slice per concern, selectors from `auto-zustand-selectors-hook`. `settings` (persisted in MMKV, unencrypted: addresses and switches), `review` (not persisted: the Paste draft and the last pasted review). |
 | `src/hooks/` | `useDemo` (the engine and the demo accounts, or why there are none), `useSampleOutcomes` (a chain's samples reviewed once per settings, shared by the gallery and the review), `useReviewSettings`, `useLocalization`. |
@@ -55,3 +55,7 @@ key's addresses also passes its account keys (`accounts`), so change is verified
 Bitcoin mainnet so the registry's descriptors and the built-in token lists apply; the app fetches nothing.
 
 **Native changes need a rebuild**: `yarn prebuild`, then a native run.
+
+**Few words on screen.** No lead paragraphs under titles and no captions on gallery rows: a sample shows its title,
+its summary and its risk, and the review says the rest. Section captions are one short line, only where a control
+needs it. A sample's `caption` documents it in code and in tests; the app does not show it.

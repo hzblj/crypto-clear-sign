@@ -2,19 +2,10 @@ import {isClearSignError, localize} from '@hzblj/crypto-clear-sign'
 import {Box, EmptyState, Island, Pressable, RnIcon, RnText, Skeleton} from '@hzblj/kara-ui'
 import {type Href, useRouter} from 'expo-router'
 
-import {Lead, Notice, Page, Pill, RiskBadge} from '../../components'
+import {Page, Pill, RiskBadge} from '../../components'
 import {type ChainId, type SampleOutcome, signerOf} from '../../core'
 import {useLocalization, useReviewSettings, useSampleOutcomes} from '../../hooks'
 import {shortAddress} from '../../utils'
-
-const LEADS: {readonly [Id in ChainId]: string} = {
-  bitcoin:
-    'PSBTs and messages for the demo key’s native SegWit and Taproot accounts, read by @hzblj/crypto-clear-sign-bitcoin: whose coins, who is paid, the fee, what each signature leaves open, where inscriptions and runes go.',
-  ethereum:
-    'What dApps ask an Ethereum wallet to sign, read by @hzblj/crypto-clear-sign-ethereum: transactions, typed data, messages and authorizations, from the bytes that would be signed. Tap one for its review.',
-  solana:
-    'Transactions and messages as Solana dApps send them, read by @hzblj/crypto-clear-sign-solana: one action per instruction, lookup tables, IDLs.',
-}
 
 const Row = ({chain, outcome}: {chain: ChainId; outcome: SampleOutcome}) => {
   const router = useRouter()
@@ -51,9 +42,6 @@ const Row = ({chain, outcome}: {chain: ChainId; outcome: SampleOutcome}) => {
           {isClearSignError(outcome.error) ? outcome.error.code : String(outcome.error)}
         </RnText>
       )}
-      <RnText color="content.tertiary" numberOfLines={2} variant="caption">
-        {sample.caption}
-      </RnText>
     </Pressable>
   )
 }
@@ -81,7 +69,6 @@ export const GalleryScreen = ({chain}: {chain: ChainId}) => {
   return (
     <Page onRefresh={refresh} testID={`gallery-${chain}`}>
       <Box gap="s12">
-        <Lead>{LEADS[chain]}</Lead>
         <Box gap="s6" row wrap>
           <Pill label={signer === undefined ? 'No signer' : `Signer ${shortAddress(signer)}`} tone="accent" />
           <Pill label={settings.resolvers ? 'Resolvers on' : 'Resolvers off'} />
@@ -101,10 +88,6 @@ export const GalleryScreen = ({chain}: {chain: ChainId}) => {
           ))}
         </Box>
       )}
-      <Notice
-        text="Nothing here is signed or broadcast: every request is built in the app, read by the chain package, and only shown."
-        tone="info"
-      />
     </Page>
   )
 }

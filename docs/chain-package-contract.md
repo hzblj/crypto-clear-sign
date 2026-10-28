@@ -117,9 +117,9 @@ export const clearSignTransaction = async (chain, transaction, options = {}) => 
   for repeated ones (`output-0`, `recipient-2`). Unique within an action, lists and raw fields included; every
   warning names the fields it is about.
 - **Sources.** `{kind: 'builtin', decoder}` with a stable kebab-case decoder name (`native-transfer`, `erc20`,
-  `system-program`, `spl-token`, `psbt`, `eip191`, `bip322`, listed in the README); `{kind: 'descriptor', format:
-  'erc7730' | 'idl', id, publisher}` from the descriptor resolver's answer; `{kind: 'unknown'}` with the bytes in
-  `raw`.
+  `system-program`, `spl-token`, `psbt`, `eip191`, `bip322`, listed in the package's `CLAUDE.md` or the registry it
+  points to); `{kind: 'descriptor', format: 'erc7730' | 'idl', id, publisher}` from the descriptor resolver's answer;
+  `{kind: 'unknown'}` with the bytes in `raw`.
 - **Raw.** What was left undecoded goes in `raw` as `rawField`s: call data of an unknown call, an unknown
   instruction's data (its accounts as address fields), a message that is not text. Decoded parts are not repeated
   there.
@@ -192,22 +192,23 @@ Then `yarn test`, `yarn typecheck`, `yarn lint`, `yarn biome:check` and `yarn pa
 
 ## The README
 
-Each package's README, in the style of the others (badges, no em dashes, the footer with Documentation, Security and
-"More libraries"):
+Short and practical, for a developer who installs the package and uses it: about a hundred lines, no em dashes.
+Design rationale goes in `docs/adr/`, how it is tested in `docs/compatibility.md`, and behaviour a user cannot act on
+(field ids, decoder details) in the package's `CLAUDE.md`. In this order:
 
-1. What it reads, in two sentences, and the install line with its peers:
-   `npx expo install @hzblj/crypto-clear-sign @hzblj/crypto-clear-sign-<chain> @hzblj/crypto-<chain> @hzblj/nitro-crypto react-native-nitro-modules`.
-2. Usage of every export, with the result it gives (its `plainText`, or the fields that matter).
-3. **What it recognizes:** a table of decoders (the `source.decoder` names), what each reads, and the intent, fields
-   and warnings it gives. Anything else is `UNKNOWN_CONTRACT_CALL` or `BLIND_SIGNING` with its raw data.
-4. **Warnings:** every code it can raise (the shared ones it uses and its own) with severity and trigger, and any
-   severity it changes and why.
-5. **Texts:** its own text codes (`<CHAIN>_TEXTS`) and which shared ones it uses.
-6. **Resolvers:** the queries it makes (token addresses or mints, names, its descriptor query), the descriptor
-   format and the subset of it that it reads, and what a descriptor can and cannot make it say.
-7. **Trust:** what it cannot know (simulation, on-chain state, what a contract really does), with a link to
-   `SECURITY.md`.
-8. **Not in this version.**
+1. The title, the npm and license badges, and one sentence on what it reads.
+2. **Install:** `npx expo install @hzblj/crypto-clear-sign @hzblj/crypto-clear-sign-<chain> @hzblj/crypto-<chain> @hzblj/nitro-crypto react-native-nitro-modules`.
+3. **Quick start:** one code block to copy: the engine and the adapter, the call, the result read or rendered.
+4. **API:** a table, one line per exported function or constant with its key options. Types only where a user has to
+   name them, and the `ClearSignError` codes it throws in one line.
+5. **Warnings:** a table of its own codes, one line each: code, severity, when it fires. The shared codes are in the
+   core's README; a shared code whose severity it changes is listed too, with why.
+6. **Options and resolvers** of its own (lookup tables, IDLs, accounts, assets), in one table, where it has any.
+7. **Not supported:** a short list.
+8. **Links** in one line (Security, compatibility, the ADRs, the license), then the "More libraries" line.
+
+Trust is one or two sentences and a link to `SECURITY.md`. The core's README follows the same form and adds the result
+model in brief, rendering, the resolvers, localization and the shared codes.
 
 The package's `CLAUDE.md` gets its paths table and rules; the root `README.md` package table and `docs/compatibility.md`
 get the package's row (edit only that row); its changeset in `.changeset/` describes what the first release does.

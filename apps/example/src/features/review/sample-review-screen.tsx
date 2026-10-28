@@ -2,7 +2,7 @@ import {isClearSignError} from '@hzblj/crypto-clear-sign'
 import {Box, Button, Island, Skeleton} from '@hzblj/kara-ui'
 import {type Href, Stack, useLocalSearchParams, useRouter} from 'expo-router'
 
-import {ClearSigningView, Lead, Notice, Page, Pill} from '../../components'
+import {ClearSigningView, Notice, Page, Pill} from '../../components'
 import {type ChainId, type PasteKind, pasteTextOf, payloadOf, sampleOf} from '../../core'
 import {useLocalization, useSampleOutcomes} from '../../hooks'
 import {useReviewStore} from '../../store'
@@ -48,7 +48,6 @@ export const SampleReviewScreen = ({chain}: {chain: ChainId}) => {
     <Page testID={`review-${sample.id}`}>
       <Stack.Screen options={{title: sample.title}} />
       <Box gap="s8">
-        <Lead>{sample.caption}</Lead>
         {outcome !== undefined && 'request' in outcome && outcome.request.context?.origin !== undefined ? (
           <Box row>
             <Pill label={`Asked by ${outcome.request.context.origin}`} />

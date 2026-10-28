@@ -9,6 +9,12 @@ import * as api from '../src'
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
+/** The changesets waiting for a release, every package's: a release consumes them, so there may be none. */
+const changesets = () =>
+  readdirSync(new URL('../../../.changeset/', import.meta.url))
+    .filter(file => file.endsWith('.md') && file !== 'README.md')
+    .map(file => read(`../../../.changeset/${file}`))
+
 /** Every file under `src/`, its path relative to this directory. */
 const sources = (directory = '../src/'): string[] =>
   readdirSync(new URL(directory, import.meta.url)).flatMap(entry =>
@@ -107,12 +113,12 @@ describe('the package', () => {
     }
   })
 
-  test('the docs have no em dashes: README, CLAUDE.md, the JSDoc in src, its warnings, the changeset', () => {
+  test('the docs have no em dashes: README, CLAUDE.md, the JSDoc in src, its warnings, pending changesets', () => {
     const files = sources()
     const docs = [
       read('../README.md'),
       read('../CLAUDE.md'),
-      read('../../../.changeset/clear-sign-solana.md'),
+      ...changesets(),
       ...files.flatMap(file => read(file).match(/\/\*\*[\s\S]*?\*\//g) ?? []),
       ...Object.values(api.SOLANA_WARNINGS).map(definition => definition.message),
       ...Object.values(api.SOLANA_TEXTS).flatMap(group => Object.values(group).map(entry => entry.text)),

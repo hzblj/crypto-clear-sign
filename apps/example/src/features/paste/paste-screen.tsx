@@ -1,10 +1,10 @@
 import {isClearSignError} from '@hzblj/crypto-clear-sign'
-import {Box, Button, Chip, Island, RnText, SegmentedControl, TextField, VStack} from '@hzblj/kara-ui'
+import {Box, Button, Chip, Island, SegmentedControl, TextField, VStack} from '@hzblj/kara-ui'
 import {getStringAsync} from 'expo-clipboard'
 import {type Href, useRouter} from 'expo-router'
 import {useState} from 'react'
 
-import {Lead, Notice, Page, Section} from '../../components'
+import {Notice, Page, Section} from '../../components'
 import {
   CHAIN_IDS,
   type ChainId,
@@ -121,10 +121,6 @@ export const PasteScreen = () => {
 
   return (
     <Page testID="paste">
-      <Lead>
-        Paste what a dApp asks a wallet to sign and see its review. Nothing is signed; the settings apply as in the
-        galleries.
-      </Lead>
       <Section title="Chain">
         <SegmentedControl
           onChange={index => {
@@ -153,7 +149,7 @@ export const PasteScreen = () => {
         ) : null}
       </Section>
       {examples.length > 0 ? (
-        <Section caption="Fills the field with a sample's request, as a dApp would send it." title="Try">
+        <Section title="Try">
           <Box gap="s8" row wrap>
             {examples.map(outcome =>
               'request' in outcome ? (
@@ -201,10 +197,6 @@ export const PasteScreen = () => {
       {error ? (
         <Box gap="s4" testID="paste-error">
           <Notice text={error.message} title={error.code} tone="destructive" />
-          <RnText color="content.tertiary" variant="footnote">
-            INVALID_INPUT: the text, or the bytes, do not read. CHAIN_MISMATCH: it is for another chain. UNSUPPORTED: a
-            kind the chain package does not read.
-          </RnText>
         </Box>
       ) : null}
     </Page>
