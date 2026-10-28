@@ -57,8 +57,10 @@
     "test": "node --conditions=source --import tsx --test 'test/**/*.test.ts'"
   },
   "dependencies": {
+    "@ethereum-sourcify/clear-signing": "^0.3.0",
     "@hzblj/crypto-clear-sign": "workspace:^",
-    "@hzblj/crypto-ethereum": "^0.3.0"
+    "@hzblj/crypto-ethereum": "^0.3.0",
+    "@noble/hashes": "^1.8.0"
   },
   "peerDependencies": {
     "@hzblj/nitro-crypto": "^0.1.5"

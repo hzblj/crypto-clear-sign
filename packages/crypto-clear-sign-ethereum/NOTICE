@@ -9,5 +9,8 @@ with the SHA-256 recorded for each file in src/registry/manifest.json, by script
 The registry's contents are dedicated to the public domain under CC0 1.0 Universal:
 https://creativecommons.org/publicdomain/zero/1.0/legalcode
 
+ERC-7730 descriptors are rendered by @ethereum-sourcify/clear-signing,
+https://github.com/sourcifyeth/clear-signing (MIT), a dependency installed beside this package and not bundled in it.
+
 Each descriptor names its own owner in its metadata. A descriptor describes calls and messages in words its authors
 chose; load it only if you trust the registry it comes from.

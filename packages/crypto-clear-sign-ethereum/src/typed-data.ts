@@ -27,12 +27,13 @@ import {hex, utf8} from '@hzblj/nitro-crypto/adapter'
 import type {AbiField, AbiValue} from './abi'
 import {elementaryType} from './abi'
 import {addressOf, isUnlimited, shown, tokenAmount, uintOf} from './calls/common'
+import {describeCall} from './calls/describe'
 import {momentField} from './calls/time'
 import {ETHEREUM_TEXTS, ETHEREUM_WARNINGS} from './catalogs'
 import {encodeType, normalizeEncodeType} from './eip712'
 import {createEnv, type Env, type EthereumClearSignChain, type EthereumClearSignOptions, lower, read} from './env'
-import {describeTypedDataByDescriptor, type TypedDataSubject} from './erc7730/apply'
-import {genericField} from './erc7730/render'
+import {describeTypedDataByDescriptor} from './erc7730/apply'
+import {genericField} from './generic'
 import {PERMIT2} from './known'
 
 type Types = {readonly [struct: string]: readonly TypedDataField[]}
@@ -564,38 +565,29 @@ export const clearSignTypedData = async (
   }
 
   if (described === undefined && primaryType !== 'EIP712Domain') {
-    const query = {
-      chain: env.ref,
-      encodeType: signature,
-      kind: 'eip712' as const,
-      primaryType,
-      ...(chainId === undefined ? {} : {chainId}),
-      ...(verifyingContract === undefined ? {} : {verifyingContract}),
-      ...(name === undefined ? {} : {domainName: name}),
-    }
-    const answer = await env.context.descriptor(query)
-
-    if (answer !== undefined) {
-      let separator: string | undefined
-
-      try {
-        separator = `0x${hex.encode(chain.hashDomain({domain: typedData.domain ?? {}, types: typedData.types}))}`
-      } catch {
-        separator = undefined
-      }
-
-      const target: TypedDataSubject = {
+    const applied = await describeTypedDataByDescriptor(
+      env,
+      {
+        chainId,
         domain,
+        domainName: name,
+        domainSeparator: () => {
+          try {
+            return `0x${hex.encode(chain.hashDomain({domain: typedData.domain ?? {}, types: typedData.types}))}`
+          } catch {
+            return undefined
+          }
+        },
         encodeType: signature,
+        message,
         primaryType,
-        ...(chainId === undefined ? {} : {chainId}),
-        ...(verifyingContract === undefined ? {} : {verifyingContract}),
-        ...(separator === undefined ? {} : {domainSeparator: separator}),
-      }
-      const applied = await describeTypedDataByDescriptor(env, target, message, answer)
-      described = applied.described
-      extra.push(...applied.warnings)
-    }
+        types,
+        verifyingContract,
+      },
+      call => describeCall(env, call)
+    )
+    described = applied.described
+    extra.push(...applied.warnings)
   }
 
   const action = described ?? (await generic(env, message, primaryType, name ?? verifyingContract ?? '?'))

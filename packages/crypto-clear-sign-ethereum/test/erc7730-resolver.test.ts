@@ -15,8 +15,7 @@ import {
   type EthereumDescriptorQuery,
   mergeDescriptors,
 } from '../src'
-import {compileDescriptor, DescriptorError} from '../src/erc7730/compile'
-import {atText, locate, MAX_LOCATED, parsePath, pathText} from '../src/erc7730/path'
+import {bindingOf, DescriptorError} from '../src/erc7730/binding'
 import {ETHEREUM_REGISTRY, registryResolver} from '../src/registry'
 import {chainOf, codes, encode, mainnet, OTHER, options, request} from './helpers'
 
@@ -31,412 +30,6 @@ const vault = (formats: Record<string, unknown>, extra: Record<string, unknown> 
 })
 
 const STAKE = {'stake(uint256 amount)': {fields: [{label: 'Amount', path: 'amount'}], intent: 'Stake'}}
-
-const rejected = (content: unknown, why: string) =>
-  assert.throws(
-    () => compileDescriptor(content),
-    error => error instanceof DescriptorError,
-    why
-  )
-
-describe('ERC-7730 paths', () => {
-  test('the parser: roots, members, indexes, slices and every element', () => {
-    const table: readonly [string, unknown][] = [
-      ['amount', {absolute: false, root: 'data', steps: [{kind: 'field', name: 'amount'}]}],
-      ['#.amount', {absolute: true, root: 'data', steps: [{kind: 'field', name: 'amount'}]}],
-      ['@.from', {absolute: true, root: 'container', steps: [{kind: 'field', name: 'from'}]}],
-      ['@.chainId', {absolute: true, root: 'container', steps: [{kind: 'field', name: 'chainId'}]}],
-      [
-        '$.metadata.constants.max',
-        {
-          absolute: true,
-          root: 'descriptor',
-          steps: [
-            {kind: 'field', name: 'metadata'},
-            {kind: 'field', name: 'constants'},
-            {kind: 'field', name: 'max'},
-          ],
-        },
-      ],
-      [
-        'details.[0].amount',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'details'},
-            {index: 0, kind: 'index'},
-            {kind: 'field', name: 'amount'},
-          ],
-        },
-      ],
-      [
-        'details[0].amount',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'details'},
-            {index: 0, kind: 'index'},
-            {kind: 'field', name: 'amount'},
-          ],
-        },
-      ],
-      [
-        'path.[-1]',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'path'},
-            {index: -1, kind: 'index'},
-          ],
-        },
-      ],
-      [
-        'path.[1:3]',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'path'},
-            {end: 3, kind: 'slice', start: 1},
-          ],
-        },
-      ],
-      [
-        'path.[:20]',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'path'},
-            {end: 20, kind: 'slice'},
-          ],
-        },
-      ],
-      [
-        'path.[-20:]',
-        {
-          absolute: false,
-          root: 'data',
-          steps: [
-            {kind: 'field', name: 'path'},
-            {kind: 'slice', start: -20},
-          ],
-        },
-      ],
-      ['orders.[]', {absolute: false, root: 'data', steps: [{kind: 'field', name: 'orders'}, {kind: 'all'}]}],
-      ['orders[]', {absolute: false, root: 'data', steps: [{kind: 'field', name: 'orders'}, {kind: 'all'}]}],
-      ['_amount$0', {absolute: false, root: 'data', steps: [{kind: 'field', name: '_amount$0'}]}],
-      // Not paths.
-      ['', undefined],
-      ['#.', undefined],
-      ['a..b', undefined],
-      ['a b', undefined],
-      ['a-b', undefined],
-      ['a.[x]', undefined],
-      ['a.[1:2:3]', undefined],
-      ['a.[1234567]', undefined],
-      ['a.[0', undefined],
-      ['@.sender', undefined],
-      ['@.from.x', undefined],
-      ['@.[0]', undefined],
-      ['x'.repeat(257), undefined],
-    ]
-
-    for (const [text, expected] of table) {
-      assert.deepEqual(parsePath(text), expected, text)
-    }
-
-    for (const value of [42, null, undefined, {}, ['a']]) {
-      assert.equal(parsePath(value), undefined)
-    }
-
-    // Written back with concrete indexes, as ids and interpolation keys use it.
-    for (const text of ['amount', '@.from', '$.metadata.x', 'a.[0].b', 'a.[1:]', 'a.[]']) {
-      const parsed = parsePath(text)
-      assert.ok(parsed)
-      assert.equal(pathText(parsed), text)
-    }
-  })
-
-  test('locate: members, negative indexes, slices of arrays and of bytes, bounded', () => {
-    const tree = {
-      fields: [
-        {
-          name: 'list',
-          value: {
-            items: [1n, 2n, 3n, 4n].map(value => ({bits: 256, kind: 'uint' as const, value})),
-            kind: 'array' as const,
-          },
-        },
-        {name: 'blob', value: {kind: 'bytes' as const, value: Uint8Array.of(1, 2, 3, 4, 5)}},
-        {name: 'word', value: {bits: 256, kind: 'uint' as const, value: 0x0102n}},
-      ],
-      kind: 'tuple' as const,
-    }
-    const at = (text: string) => {
-      const parsed = parsePath(text)
-      assert.ok(parsed, text)
-
-      return locate(tree, parsed.steps)
-    }
-
-    assert.deepEqual(
-      at('list.[-1]').map(entry => atText(entry.at)),
-      ['list.3']
-    )
-    assert.deepEqual(
-      at('list.[1:3]').map(entry => atText(entry.at)),
-      ['list.1', 'list.2']
-    )
-    assert.deepEqual(
-      at('list.[-2:]').map(entry => atText(entry.at)),
-      ['list.2', 'list.3']
-    )
-    assert.equal(at('list.[]').length, 4)
-    assert.deepEqual(at('list.[9]'), [])
-    assert.deepEqual(at('list.[-9]'), [])
-    assert.deepEqual(at('missing'), [])
-    assert.deepEqual(at('blob.[1:3]')[0]?.value, {kind: 'bytes', value: Uint8Array.of(2, 3)})
-    assert.deepEqual(at('blob.[-2:]')[0]?.value, {kind: 'bytes', value: Uint8Array.of(4, 5)})
-    // An integer's 32-byte word, sliced.
-    assert.deepEqual(at('word.[30:]')[0]?.value, {kind: 'bytes', value: Uint8Array.of(1, 2)})
-    // A slice past the end is cut to it; one that ends before it starts is empty.
-    assert.deepEqual(at('blob.[3:99]')[0]?.value, {kind: 'bytes', value: Uint8Array.of(4, 5)})
-    assert.deepEqual(at('blob.[4:2]')[0]?.value, {kind: 'bytes', value: new Uint8Array()})
-
-    const many = {
-      fields: [
-        {
-          name: 'list',
-          value: {
-            items: Array.from({length: 1000}, () => ({bits: 8, kind: 'uint' as const, value: 1n})),
-            kind: 'array' as const,
-          },
-        },
-      ],
-      kind: 'tuple' as const,
-    }
-    assert.equal(locate(many, parsePath('list.[]')?.steps ?? []).length, MAX_LOCATED)
-  })
-})
-
-describe('compiling a descriptor', () => {
-  test('a well-formed one compiles, $refs merged with their params', () => {
-    const compiled = compileDescriptor(
-      vault(
-        {
-          'stake(uint256 amount, address to)': {
-            fields: [
-              {$ref: '$.display.definitions.amount', params: {threshold: '0x10'}, path: 'amount'},
-              {format: 'addressName', label: '$.metadata.constants.toLabel', path: 'to'},
-            ],
-            intent: {Stake: 'tokens'},
-            interpolatedIntent: 'Stake {amount}',
-          },
-        },
-        {
-          display: {
-            definitions: {amount: {format: 'tokenAmount', label: 'Amount', params: {token: OTHER}}},
-            formats: {
-              'stake(uint256 amount, address to)': {
-                fields: [
-                  {$ref: '$.display.definitions.amount', params: {threshold: '0x10'}, path: 'amount'},
-                  {format: 'addressName', label: '$.metadata.constants.toLabel', path: 'to'},
-                ],
-                intent: {Stake: 'tokens'},
-                interpolatedIntent: 'Stake {amount}',
-              },
-            },
-          },
-          metadata: {constants: {toLabel: 'Beneficiary'}, owner: 'Vault', token: {decimals: 18, ticker: 'VLT'}},
-        }
-      )
-    )
-    assert.equal(compiled.kind, 'calldata')
-    assert.equal(compiled.version, 2)
-    assert.deepEqual(compiled.deployments, [{address: VAULT.toLowerCase(), chainId: 1}])
-    assert.deepEqual(compiled.token, {decimals: 18, ticker: 'VLT'})
-    const [format] = compiled.formats
-    assert.equal(format?.fn?.signature, 'stake(uint256,address)')
-    assert.equal(format?.intent, 'Stake: tokens')
-    const [amount, to] = format?.fields ?? []
-    assert.deepEqual(amount?.kind === 'field' && [amount.format, amount.label, amount.params], [
-      'tokenAmount',
-      'Amount',
-      {threshold: '0x10', token: OTHER},
-    ])
-    assert.equal(to?.kind === 'field' && to.label, 'Beneficiary')
-  })
-
-  test('every malformed part is refused whole: DescriptorError, never half a descriptor', () => {
-    const field = (extra: Record<string, unknown>) =>
-      vault({'stake(uint256 amount)': {fields: [extra], intent: 'Stake'}})
-    const format = (extra: Record<string, unknown>) =>
-      vault({'stake(uint256 amount)': {fields: [{label: 'Amount', path: 'amount'}], intent: 'Stake', ...extra}})
-    const eip712 = (
-      context: Record<string, unknown>,
-      formats: Record<string, unknown> = {Order: {intent: 'Order'}}
-    ) => ({
-      context: {eip712: context},
-      display: {formats},
-    })
-    const nest = (depth: number): Record<string, unknown> =>
-      depth === 0 ? {label: 'Amount', path: 'amount'} : {fields: [nest(depth - 1)]}
-
-    const cases: readonly [string, unknown][] = [
-      ['not an object', 'descriptor'],
-      ['an array', []],
-      ['null', null],
-      ['includes not merged', {...vault(STAKE), includes: 'common.json'}],
-      ['$schema not text', {...vault(STAKE), $schema: 2}],
-      [
-        'a later major version',
-        {...vault(STAKE), $schema: 'https://eips.ethereum.org/assets/erc-7730/erc7730-v3.schema.json'},
-      ],
-      ['no context', {display: {formats: STAKE}}],
-      ['no display', {context: {contract: {deployments: []}}}],
-      ['metadata not an object', {...vault(STAKE), metadata: 'Vault'}],
-      ['bound to both', {...vault(STAKE), context: {contract: {}, eip712: {}}}],
-      ['bound to neither', {...vault(STAKE), context: {}}],
-      ['context.contract not an object', {...vault(STAKE), context: {contract: 'x'}}],
-      ['formats not an object', {...vault(STAKE), display: {formats: []}}],
-      ['definitions not an object', {...vault(STAKE), display: {definitions: [], formats: STAKE}}],
-      [
-        'too many formats',
-        vault(Object.fromEntries(Array.from({length: 2049}, (_, index) => [`f${index}(uint256 a)`, {intent: 'F'}]))),
-      ],
-      ['a format not an object', vault({'stake(uint256 amount)': 'Stake'})],
-      ['deployments not a list', {...vault(STAKE), context: {contract: {deployments: {}}}}],
-      ['chain id 0', {...vault(STAKE), context: {contract: {deployments: [{address: VAULT, chainId: 0}]}}}],
-      ['chain id as text', {...vault(STAKE), context: {contract: {deployments: [{address: VAULT, chainId: '1'}]}}}],
-      ['chain id not whole', {...vault(STAKE), context: {contract: {deployments: [{address: VAULT, chainId: 1.5}]}}}],
-      [
-        'an address that is not one',
-        {...vault(STAKE), context: {contract: {deployments: [{address: '0x77', chainId: 1}]}}},
-      ],
-      ['a field with a path and a value', field({label: 'Amount', path: 'amount', value: 1})],
-      ['a field with neither', field({label: 'Amount'})],
-      ['a $ref to nothing', field({$ref: '$.display.definitions.missing', path: 'amount'})],
-      ['a $ref that is not one', field({$ref: 'definitions.amount', path: 'amount'})],
-      ['params not an object', field({params: [], path: 'amount'})],
-      ['a format that is not a name', field({format: 7, path: 'amount'})],
-      ['a format name past 64', field({format: 'x'.repeat(65), path: 'amount'})],
-      ['a value that is an object', field({value: {}})],
-      ['a path that is not one', field({path: 'a..b'})],
-      ['visibility unknown', field({path: 'amount', visible: 'sometimes'})],
-      ['ifNotIn empty', field({path: 'amount', visible: {ifNotIn: []}})],
-      ['ifNotIn and mustMatch', field({path: 'amount', visible: {ifNotIn: [1], mustMatch: [1]}})],
-      [
-        'mustMatch past 64',
-        field({path: 'amount', visible: {mustMatch: Array.from({length: 65}, (_, index) => index)}}),
-      ],
-      ['a label past 128', field({label: 'L'.repeat(129), path: 'amount'})],
-      ['a label naming a constant that is not text', field({label: '$.metadata.owner.x', path: 'amount'})],
-      ['a separator past 128', field({path: 'amount', separator: 'S'.repeat(129)})],
-      ['an iteration unknown', format({fields: [{fields: [], iteration: 'parallel'}]})],
-      ['groups nested past 8', format({fields: [nest(10)]})],
-      ['more than 512 fields', format({fields: Array.from({length: 513}, () => ({label: 'A', path: 'amount'}))})],
-      ['fields not a list', format({fields: {}})],
-      ['a field not an object', format({fields: ['amount']})],
-      ['an empty intent', format({intent: ' '})],
-      ['an intent past 128', format({intent: 'I'.repeat(129)})],
-      ['an intent object of non-text', format({intent: {Stake: 5}})],
-      [
-        'an intent object of 9 entries',
-        format({intent: Object.fromEntries(Array.from({length: 9}, (_, i) => [`k${i}`, 'v']))}),
-      ],
-      ['an interpolated intent past 512', format({interpolatedIntent: 'I'.repeat(513)})],
-      ['an interpolated intent not text', format({interpolatedIntent: 5})],
-      ['required not a list', format({required: 'amount'})],
-      ['excluded listing a non-path', format({excluded: ['a..b']})],
-      ['a selector the ABI does not have', vault({'0x12345678': {intent: 'X'}})],
-      ['a name without an ABI', vault({stake: {intent: 'X'}})],
-      ['a broken signature', vault({'stake(uint256': {intent: 'X'}})],
-      ['an unknown type', vault({'stake(uint7 amount)': {intent: 'X'}})],
-      ['two formats of one function', vault({'stake(uint256 a)': {intent: 'X'}, 'stake(uint256 b)': {intent: 'Y'}})],
-      ['context.eip712 not an object', {context: {eip712: 'x'}, display: {formats: {}}}],
-      ['a domain not an object', eip712({domain: 'Permit2'})],
-      ['a domain separator not 32 bytes', eip712({domainSeparator: '0x1234'})],
-      [
-        'two formats of one message type',
-        eip712({}, {'Order(uint256  a)': {intent: 'B'}, 'Order(uint256 a)': {intent: 'A'}}),
-      ],
-      ['schemas not a list', eip712({schemas: {}})],
-      ['a schema without a primary type', eip712({schemas: [{types: {}}]})],
-      ['a schema type not a list', eip712({schemas: [{primaryType: 'Order', types: {Order: {}}}]})],
-      ['a schema member not a pair', eip712({schemas: [{primaryType: 'Order', types: {Order: [{name: 'a'}]}}]})],
-    ]
-
-    for (const [why, content] of cases) {
-      rejected(content, why)
-    }
-  })
-
-  test('version 1: formats by selector, by name and by unnamed signature, from its ABI; schemas by primary type', () => {
-    const abi = [
-      {
-        inputs: [
-          {name: 'amount', type: 'uint256'},
-          {components: [{name: 'to', type: 'address'}], name: 'target', type: 'tuple'},
-        ],
-        name: 'stake',
-        type: 'function',
-      },
-      {inputs: [{name: 'amount', type: 'uint256'}], name: 'unstake', type: 'function'},
-      {inputs: [], name: 'claim', type: 'function'},
-    ]
-    const v1 = compileDescriptor({
-      $schema: 'https://github.com/LedgerHQ/clear-signing-erc7730-registry/specs/erc7730-v1.schema.json',
-      context: {contract: {abi, deployments: [{address: VAULT, chainId: 1}]}},
-      display: {
-        formats: {
-          '0x4e71d92d': {intent: 'Claim'},
-          'stake(uint256,(address))': {intent: 'Stake'},
-          unstake: {intent: 'Unstake'},
-        },
-      },
-      metadata: {owner: 'Vault'},
-    })
-    assert.equal(v1.version, 1)
-    assert.deepEqual(
-      v1.formats.map(entry => [entry.key, entry.fn?.name, entry.fn?.inputs.map(input => input.name)]),
-      [
-        ['0x4e71d92d', 'claim', []],
-        ['stake(uint256,(address))', 'stake', ['amount', 'target']],
-        ['unstake', 'unstake', ['amount']],
-      ]
-    )
-
-    const schemas = compileDescriptor({
-      $schema: '../../specs/erc7730-v1.schema.json',
-      context: {
-        eip712: {
-          deployments: [{address: VAULT, chainId: 1}],
-          schemas: [
-            'https://example.com/schema.json',
-            {
-              primaryType: 'Order',
-              types: {
-                EIP712Domain: [{name: 'name', type: 'string'}],
-                Item: [{name: 'id', type: 'uint256'}],
-                Order: [
-                  {name: 'item', type: 'Item'},
-                  {name: 'maker', type: 'address'},
-                ],
-              },
-            },
-          ],
-        },
-      },
-      display: {formats: {Order: {intent: 'Order'}}},
-    })
-    assert.deepEqual([...schemas.schemas], [['Order', 'Order(Item item,address maker)Item(uint256 id)']])
-    assert.equal(schemas.formats[0]?.primaryType, 'Order')
-  })
-})
 
 describe('descriptor files', () => {
   const COMMON: Erc7730File = {
@@ -677,7 +270,7 @@ describe('descriptor files', () => {
       null as unknown as Erc7730File,
     ])
     assert.deepEqual(Object.fromEntries(resolver.rejected.map(entry => [entry.path, entry.reason])), {
-      'app/broken.json': 'display.formats["stake(uint256 a"] is not a function signature.',
+      'app/broken.json': 'A format of a contract is keyed by a function signature.',
       'app/common-alone.json': 'A descriptor has a context, display and, when present, metadata objects.',
       'app/factory.json': 'It binds to no contract or message.',
       'app/not-json.json': 'It is not a JSON object.',
@@ -823,7 +416,7 @@ const vectorFiles = (directory: string): string[] =>
     })
 
 describe('fuzzing mutated descriptors', () => {
-  test('compiling: a descriptor compiles or throws DescriptorError, nothing else', () => {
+  test('binding: a descriptor binds or throws DescriptorError, nothing else; a resolver never throws', () => {
     const next = random(7730)
     let refused = 0
     let runs = 0
@@ -832,8 +425,12 @@ describe('fuzzing mutated descriptors', () => {
       for (let round = 0; round < 60; round++) {
         runs++
 
+        const mutated = mutate(file.descriptor, next) as Erc7730Descriptor
+
+        assert.doesNotThrow(() => createDescriptorResolver([{descriptor: mutated, path: file.path}]))
+
         try {
-          compileDescriptor(mutate(file.descriptor, next))
+          bindingOf(mutated)
         } catch (error) {
           assert.ok(error instanceof DescriptorError, `${file.path}: ${String(error)}`)
           refused++
@@ -923,5 +520,64 @@ describe('fuzzing mutated descriptors', () => {
 
     assert.ok(used > 40, `${used} cases had a descriptor`)
     assert.equal(runs, used * 5)
+  })
+
+  test('call data mutated under the bundled descriptors: never a throw, never a hang', async () => {
+    const next = random(1337)
+    const registry = registryResolver()
+    const {parseTransaction} = await import('viem')
+    let runs = 0
+    let read = 0
+
+    for (const file of vectorFiles(VECTORS)) {
+      const vectors = JSON.parse(readFileSync(file, 'utf8')) as {
+        readonly tests: readonly {readonly rawTx?: `0x${string}`}[]
+      }
+
+      for (const entry of vectors.tests.filter(test => test.rawTx !== undefined).slice(0, 3)) {
+        const tx = parseTransaction(entry.rawTx as `0x${string}`)
+        const original = Buffer.from((tx.data ?? '0x').slice(2), 'hex')
+
+        if (original.length < 4 || typeof tx.to !== 'string') {
+          continue
+        }
+
+        for (let round = 0; round < 6; round++) {
+          runs++
+          const bytes = Uint8Array.from(original)
+          const choice = next()
+
+          if (choice < 0.4) {
+            // A word past the selector set to a huge length or offset.
+            const word = 4 + 32 * Math.floor(next() * Math.max(1, (bytes.length - 4) / 32))
+            bytes.fill(0xff, Math.min(word, bytes.length), Math.min(word + 28, bytes.length))
+          } else if (choice < 0.7) {
+            for (let flip = 0; flip < 8; flip++) {
+              const at = 4 + Math.floor(next() * Math.max(1, bytes.length - 4))
+              bytes[Math.min(at, bytes.length - 1)] = Math.floor(next() * 256)
+            }
+          }
+
+          const data = choice >= 0.85 ? bytes.subarray(0, 4 + Math.floor(next() * (bytes.length - 4))) : bytes
+          const result = await clearSignTransaction(
+            chainOf(tx.chainId ?? 1),
+            request({
+              chainId: tx.chainId,
+              data: `0x${Buffer.from(data).toString('hex')}`,
+              to: tx.to,
+              value: tx.value ?? 0n,
+            }),
+            options({resolvers: {descriptors: registry}})
+          )
+
+          if (result.source.kind === 'descriptor') {
+            read++
+          }
+        }
+      }
+    }
+
+    assert.ok(runs > 200, `${runs} runs`)
+    assert.ok(read > 0 && read < runs, `${read} of ${runs} still read by a descriptor`)
   })
 })

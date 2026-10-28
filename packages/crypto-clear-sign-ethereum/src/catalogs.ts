@@ -5,12 +5,23 @@ import {defineTexts, defineWarnings, type SharedWarningCode} from '@hzblj/crypto
  * a code is never renamed or reused.
  */
 export const ETHEREUM_WARNINGS = defineWarnings('ethereum', {
+  /**
+   * An address is not the kind a descriptor expects there (its `types`): the names resolver knows it as a contract
+   * where the descriptor expects an account, say.
+   */
+  ADDRESS_TYPE_MISMATCH: {
+    message: 'An address here is not the kind of account or contract the description expects.',
+    severity: 'medium',
+  },
   /** The transaction deploys a contract: there is no recipient, and the data is its code. */
   CONTRACT_CREATION: {
     message: 'This deploys a new contract. Its code is the transaction data, which is not described here.',
     severity: 'info',
   },
-  /** A descriptor answered for this call or message, but it is malformed or does not bind to it: it was not used. */
+  /**
+   * A descriptor answered for this call or message, but it is malformed or does not bind to it: it was not used.
+   * `params.code` is the reference implementation's reason (`DEPLOYMENT_MISMATCH`, `MUSTMATCH_VIOLATION`, …).
+   */
   INVALID_DESCRIPTOR: {
     message: 'A description was found for this, but it is malformed or does not apply, so it was not used.',
     severity: 'low',
@@ -55,9 +66,20 @@ export const ETHEREUM_WARNINGS = defineWarnings('ethereum', {
     message: 'An amount here is unlimited: the other side may take as much of the token as it can.',
     severity: 'medium',
   },
-  /** A descriptor's field that could not be read as it says: shown raw, or missing. */
+  /**
+   * A descriptor's field that could not be read as it says: shown raw. `params.code`, when present, is the reference
+   * implementation's reason (`ARGUMENT_TYPE_MISMATCH`, `FORMAT_PARAM_RESOLUTION_ERROR`, …).
+   */
   UNREADABLE_FIELD: {
     message: 'Part of the description could not be read, so it is shown raw.',
+    severity: 'medium',
+  },
+  /**
+   * A descriptor from the online registry has no valid attestation from an auditor the app trusts (ERC-8176): it was
+   * not used. `params.code` is the reference implementation's (`NO_TRUSTED_ATTESTATION`).
+   */
+  UNTRUSTED_DESCRIPTOR: {
+    message: 'A description was found for this, but no auditor the wallet trusts vouches for it, so it was not used.',
     severity: 'medium',
   },
 })

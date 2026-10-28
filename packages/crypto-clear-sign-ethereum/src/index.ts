@@ -1,3 +1,11 @@
+export {
+  type AttestationOptions,
+  type ChainClient,
+  fetchPrebuiltRegistryIndex,
+  type GitHubSource,
+  type RegistryIndex,
+  type TrustedTokens,
+} from '@ethereum-sourcify/clear-signing'
 export {type AuthorizationInput, clearSignAuthorization} from './authorization'
 export {ETHEREUM_TEXTS, ETHEREUM_WARNINGS, type EthereumWarningCode} from './catalogs'
 export {
@@ -5,6 +13,7 @@ export {
   type EthereumClearSignOptions,
   type EthereumDescriptorQuery,
   type NativeCurrency,
+  type SourcifyOptions,
 } from './env'
 export {
   createDescriptorResolver,

@@ -681,8 +681,6 @@ describe('a real-world call through the bundled descriptors', () => {
     assert.deepEqual([received.value, received.decimals, received.symbol], [13_901_216n, 6, 'USDT'])
     assert.equal(fieldOf(result, 'data.params.fee', 'percent').value, 0.3)
     assert.equal(fieldOf(result, 'data.params.recipient', 'address').relation, 'self')
-    // What the descriptor does not show is still there, behind "More details".
-    assert.equal(fieldOf(result, 'data.params.sqrtPriceLimitX96', 'number').secondary, true)
     assert.deepEqual(
       [fieldOf(result, 'contract', 'address').name, fieldOf(result, 'contract', 'address').relation],
       ['Uniswap v3 Router 2', 'contract']

@@ -1,6 +1,5 @@
 import {hex, utf8} from '@hzblj/nitro-crypto/adapter'
-
-import {keccak256} from './keccak'
+import {keccak_256} from '@noble/hashes/sha3'
 
 /**
  * A Solidity ABI type: what a function's parameters and an EIP-712 struct's members are made of. `bytes` with a
@@ -221,7 +220,7 @@ const parseParameters = (text: string, start: number, depth: number): {params: A
 
 /** The selector of a canonical signature: `0x` and the first four bytes of its Keccak-256. */
 export const selectorOf = (signature: string): string =>
-  `0x${hex.encode(keccak256(utf8.encode(signature)).subarray(0, 4))}`
+  `0x${hex.encode(keccak_256(utf8.encode(signature)).subarray(0, 4))}`
 
 /**
  * A function from a human-readable fragment, with or without parameter names, spaces after commas tolerated:
@@ -251,74 +250,6 @@ export const parseFunction = (fragment: string): AbiFunction => {
   const signature = `${name}(${params.map(param => canonicalType(param.type)).join(',')})`
 
   return {inputs: params, name, selector: selectorOf(signature), signature}
-}
-
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-/** A JSON ABI parameter (`{name, type, components}`), as `contract.abi` in a version 1 descriptor carries it. */
-export const jsonParameter = (value: unknown, depth = 0): AbiParameter => {
-  if (depth > MAX_ABI_DEPTH || !isRecord(value) || typeof value.type !== 'string') {
-    return fail('A JSON ABI parameter has a type.')
-  }
-
-  const match = /^(tuple|[a-z0-9]+)((?:\[[0-9]*\])*)$/.exec(value.type)
-
-  if (!match) {
-    return fail('A JSON ABI type is an elementary type or a tuple, with array suffixes.')
-  }
-
-  let type: AbiType =
-    match[1] === 'tuple'
-      ? {
-          components: (Array.isArray(value.components) ? value.components : fail('A tuple has components.')).map(
-            (component: unknown) => jsonParameter(component, depth + 1)
-          ),
-          kind: 'tuple',
-        }
-      : (elementaryType(match[1] ?? '') ?? fail('A JSON ABI type is not an ABI type.'))
-
-  for (const suffix of (match[2] ?? '').match(/\[[0-9]*\]/g) ?? []) {
-    const size = suffix.slice(1, -1)
-    const length = size === '' ? undefined : Number(size)
-
-    if (length !== undefined && (!/^[1-9][0-9]*$/.test(size) || length > MAX_FIXED_LENGTH)) {
-      fail('A fixed array has a length from 1 to 65536.')
-    }
-
-    type = length === undefined ? {item: type, kind: 'array'} : {item: type, kind: 'array', length}
-  }
-
-  const name = typeof value.name === 'string' && IDENTIFIER.test(value.name) ? value.name : undefined
-
-  return name === undefined ? {type} : {name, type}
-}
-
-/** The functions of a JSON ABI, with their selectors; entries that are not readable functions are skipped. */
-export const jsonFunctions = (abi: unknown): AbiFunction[] => {
-  if (!Array.isArray(abi)) {
-    return []
-  }
-
-  return abi.flatMap((entry: unknown) => {
-    if (
-      !isRecord(entry) ||
-      entry.type !== 'function' ||
-      typeof entry.name !== 'string' ||
-      !Array.isArray(entry.inputs)
-    ) {
-      return []
-    }
-
-    try {
-      const inputs = entry.inputs.map((input: unknown) => jsonParameter(input))
-      const signature = `${entry.name}(${inputs.map(input => canonicalType(input.type)).join(',')})`
-
-      return IDENTIFIER.test(entry.name) ? [{inputs, name: entry.name, selector: selectorOf(signature), signature}] : []
-    } catch {
-      return []
-    }
-  })
 }
 
 const isDynamic = (type: AbiType): boolean =>

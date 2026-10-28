@@ -1,3 +1,10 @@
+import type {
+  AttestationOptions,
+  ChainClient,
+  GitHubSource,
+  RegistryIndex,
+  TrustedTokens,
+} from '@ethereum-sourcify/clear-signing'
 import {
   type AddressField,
   type AmountField,
@@ -52,6 +59,31 @@ export type EthereumDescriptorQuery =
       readonly domainName?: string
     }
 
+/**
+ * ERC-7730 online, off unless given: the Ethereum clear signing registry on GitHub, a trusted token list, and the
+ * attestation policy, passed to `@ethereum-sourcify/clear-signing` as they are. Asked only for what the `descriptors`
+ * resolver has nothing for, and only when a call or a message is described: nothing is fetched before.
+ */
+export type SourcifyOptions = {
+  /**
+   * The registry on GitHub (`ethereum/clear-signing-erc7730-registry` unless `githubSource` says otherwise). Fetch its
+   * index once, `await fetchPrebuiltRegistryIndex()`, and pass it: without one, every lookup fetches it again.
+   */
+  readonly registry?: {readonly index?: RegistryIndex; readonly githubSource?: Partial<GitHubSource>}
+  /**
+   * Tokens the wallet trusts, by chain id and address (`erc20`, `erc721`): their calls no built-in decoder reads are
+   * read by the reference implementation's templates. Never gated by `attestations`.
+   */
+  readonly trustedTokens?: TrustedTokens
+  /**
+   * ERC-8176: a registry descriptor is used only when an auditor in `trustedAttesters` attests it (checked offline,
+   * revocation through `chainClient`); otherwise `ethereum.UNTRUSTED_DESCRIPTOR`. Needs `chainClient`.
+   */
+  readonly attestations?: AttestationOptions
+  /** `eth_call` on Ethereum mainnet, for the attestations' revocation check. */
+  readonly chainClient?: ChainClient
+}
+
 /** The chain's native asset: ETH with 18 decimals unless told. */
 export type NativeCurrency = {readonly symbol: string; readonly decimals: number}
 
@@ -77,6 +109,8 @@ export type EthereumClearSignOptions = ClearSignOptions<EthereumDescriptorQuery,
    * the app's answers always come first.
    */
   readonly builtins?: boolean
+  /** ERC-7730 online (the registry on GitHub, trusted tokens, attestations): off unless given. */
+  readonly sourcify?: SourcifyOptions
 }
 
 /** The members of the chain client the package calls: `crypto.chains.ethereum` has them all. */
@@ -129,6 +163,47 @@ export const read = <Value>(run: () => Value, what: string): Value => {
 
 const invalidOption = (message: string) => new ClearSignError('INVALID_ARGUMENT', message)
 
+const isObject = (value: unknown): value is Readonly<Record<string, unknown>> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const checkSourcify = (sourcify: SourcifyOptions | undefined) => {
+  if (sourcify === undefined) {
+    return
+  }
+
+  const {attestations, chainClient, registry, trustedTokens} = isObject(sourcify) ? sourcify : ({} as SourcifyOptions)
+  const index = registry?.index
+
+  if (
+    !isObject(sourcify) ||
+    (registry !== undefined &&
+      (!isObject(registry) ||
+        (index !== undefined &&
+          (!isObject(index) || !isObject(index.calldataIndex) || !isObject(index.typedDataIndex))))) ||
+    (trustedTokens !== undefined && !isObject(trustedTokens))
+  ) {
+    throw invalidOption(
+      'sourcify is {registry?: {index?, githubSource?}, trustedTokens?, attestations?, chainClient?}.'
+    )
+  }
+
+  if (
+    attestations !== undefined &&
+    (!isObject(attestations) ||
+      !Array.isArray(attestations.trustedAttesters) ||
+      !attestations.trustedAttesters.every(entry => typeof entry === 'string' && /^0x[0-9a-fA-F]{40}$/.test(entry)))
+  ) {
+    throw invalidOption('sourcify.attestations.trustedAttesters is a list of addresses.')
+  }
+
+  if (
+    (attestations !== undefined || chainClient !== undefined) &&
+    (!isObject(chainClient) || typeof chainClient.call !== 'function')
+  ) {
+    throw invalidOption('sourcify.attestations needs sourcify.chainClient, an object with call(chainId, {to, data}).')
+  }
+}
+
 const checkOptions = (options: EthereumClearSignOptions): {native: NativeCurrency} => {
   if (typeof options !== 'object' || options === null) {
     throw invalidOption('The options are an object.')
@@ -169,6 +244,8 @@ const checkOptions = (options: EthereumClearSignOptions): {native: NativeCurrenc
   if (options.origin !== undefined && (typeof options.origin !== 'string' || options.origin.length > 253)) {
     throw invalidOption('origin is a host name.')
   }
+
+  checkSourcify(options.sourcify)
 
   return {native: {decimals: native.decimals, symbol: native.symbol}}
 }

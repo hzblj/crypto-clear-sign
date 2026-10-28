@@ -1,7 +1,8 @@
 import type {DescriptorResolver} from '@hzblj/crypto-clear-sign'
 
+import {normalizeEncodeType} from '../eip712'
 import type {EthereumDescriptorQuery} from '../env'
-import {type CompiledDescriptor, compileDescriptor, DescriptorError} from './compile'
+import {type Binding, bindingOf, DescriptorError, isBound} from './binding'
 import type {Erc7730Descriptor} from './types'
 
 /** A descriptor file, as a registry lays it out. */
@@ -95,34 +96,32 @@ const normalizePath = (path: string): string => {
 
 const directoryOf = (path: string) => path.split('/').slice(0, -1).join('/')
 
-const bindingKeys = (compiled: CompiledDescriptor): string[] =>
-  compiled.kind === 'calldata'
-    ? compiled.deployments.flatMap(deployment =>
-        compiled.formats.map(format => `c:${deployment.chainId}:${deployment.address}:${format.fn?.selector ?? ''}`)
+const bindingKeys = (binding: Binding): string[] =>
+  binding.kind === 'calldata'
+    ? binding.deployments.flatMap(deployment =>
+        [...binding.functions.keys()].map(selector => `c:${deployment.chainId}:${deployment.address}:${selector}`)
       )
-    : compiled.formats.flatMap(format => {
-        const type = format.encodeType ?? `#${format.primaryType ?? ''}`
-
-        return compiled.deployments.length > 0
-          ? compiled.deployments.map(deployment => `t:${deployment.chainId}:${deployment.address}:${type}`)
+    : [...binding.encodeTypes.keys()].flatMap(type =>
+        binding.deployments.length > 0
+          ? binding.deployments.map(deployment => `t:${deployment.chainId}:${deployment.address}:${type}`)
           : [`t:any:${type}`]
-      })
+      )
 
 type Entry = {
   readonly path: string
   readonly content: Erc7730Descriptor
-  readonly compiled: CompiledDescriptor
+  readonly binding: Binding
   readonly publisher?: string
 }
 
-const domainFits = (compiled: CompiledDescriptor, query: Extract<EthereumDescriptorQuery, {kind: 'eip712'}>) => {
-  const domain = compiled.domain ?? {}
+const domainFits = (binding: Binding, query: Extract<EthereumDescriptorQuery, {kind: 'eip712'}>) => {
+  const domain = binding.kind === 'eip712' ? (binding.domain ?? {}) : {}
   const name = domain.name
   const chainId = domain.chainId
   const verifyingContract = domain.verifyingContract
 
   return (
-    (compiled.domain !== undefined || compiled.domainSeparator !== undefined) &&
+    isBound(binding) &&
     (name === undefined || name === query.domainName) &&
     (chainId === undefined || String(chainId) === String(query.chainId)) &&
     (verifyingContract === undefined ||
@@ -214,14 +213,14 @@ export const createDescriptorResolver = (
     }
 
     try {
-      const compiled = compileDescriptor(content)
+      const binding = bindingOf(content)
 
-      if (bindingKeys(compiled).length === 0 || (compiled.kind === 'calldata' && compiled.deployments.length === 0)) {
+      if (bindingKeys(binding).length === 0 || !isBound(binding)) {
         unbound.push(path)
         continue
       }
 
-      entries.push({compiled, content, path, ...(file.publisher === undefined ? {} : {publisher: file.publisher})})
+      entries.push({binding, content, path, ...(file.publisher === undefined ? {} : {publisher: file.publisher})})
     } catch (error) {
       failures.push({path, reason: error instanceof DescriptorError ? error.message : 'It could not be read.'})
     }
@@ -245,7 +244,7 @@ export const createDescriptorResolver = (
   const unanchored = new Map<string, Entry[]>()
 
   for (const entry of entries) {
-    for (const key of bindingKeys(entry.compiled)) {
+    for (const key of bindingKeys(entry.binding)) {
       if (key.startsWith('t:any:')) {
         unanchored.set(key, [entry, ...(unanchored.get(key) ?? [])])
       } else {
@@ -270,7 +269,7 @@ export const createDescriptorResolver = (
         return answer(index.get(`c:${query.chainId}:${query.address.toLowerCase()}:${query.selector}`))
       }
 
-      const types = [query.encodeType, `#${query.primaryType}`]
+      const types = [normalizeEncodeType(query.encodeType)]
       const bound =
         query.chainId === undefined || query.verifyingContract === undefined
           ? undefined
@@ -280,7 +279,7 @@ export const createDescriptorResolver = (
 
       return answer(
         bound ??
-          types.flatMap(type => unanchored.get(`t:any:${type}`) ?? []).find(entry => domainFits(entry.compiled, query))
+          types.flatMap(type => unanchored.get(`t:any:${type}`) ?? []).find(entry => domainFits(entry.binding, query))
       )
     },
     paths: Object.freeze(entries.map(entry => entry.path)),

@@ -19,8 +19,12 @@ import {
   type EthereumClearSignOptions,
   type EthereumDescriptorQuery,
   type EthereumWarningCode,
+  fetchPrebuiltRegistryIndex,
   mergeDescriptors,
   PERMIT2,
+  type RegistryIndex,
+  type SourcifyOptions,
+  type TrustedTokens,
   VERSION,
 } from '@hzblj/crypto-clear-sign-ethereum'
 import {ETHEREUM_REGISTRY, REGISTRY_SOURCE, registryResolver} from '@hzblj/crypto-clear-sign-ethereum/registry'
@@ -50,6 +54,15 @@ export const consume = async (chain: EthereumChain, unsigned: Hex, signer: strin
     signer,
   }
   const transaction = await clearSignTransaction(chain, unsigned, options)
+  const index: RegistryIndex = await fetchPrebuiltRegistryIndex()
+  const trustedTokens: TrustedTokens = {1: {'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48': 'erc20'}}
+  const sourcify: SourcifyOptions = {
+    attestations: {trustedAttesters: ['0x3846c3A30E62075Fa916216b35EF04B8F53931f6']},
+    chainClient: {call: async () => '0x'},
+    registry: {index},
+    trustedTokens,
+  }
+  const online = await clearSignTransaction(chain, unsigned, {...options, sourcify})
   const request = await clearSignTransaction(chain, {
     gas: 21_000n,
     maxFeePerGas: 1n,
@@ -74,6 +87,8 @@ export const consume = async (chain: EthereumChain, unsigned: Hex, signer: strin
   await clearSignMessage(chain, 42)
   // @ts-expect-error: nativeCurrency has decimals
   await clearSignTransaction(chain, unsigned, {nativeCurrency: {symbol: 'POL'}})
+  // @ts-expect-error: trusted attesters are a list
+  await clearSignTransaction(chain, unsigned, {sourcify: {attestations: {trustedAttesters: '0x01'}}})
   // @ts-expect-error: VERSION is a string
   const version: number = VERSION
   // @ts-expect-error: a code of another chain is not this package's
@@ -81,6 +96,7 @@ export const consume = async (chain: EthereumChain, unsigned: Hex, signer: strin
 
   return [
     transaction,
+    online,
     request,
     typed,
     message,

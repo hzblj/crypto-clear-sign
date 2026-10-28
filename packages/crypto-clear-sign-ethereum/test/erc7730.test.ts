@@ -17,6 +17,7 @@ import {registryResolver} from '../src/registry'
 import {
   at,
   call,
+  clock,
   codes,
   DAY,
   encode,
@@ -27,8 +28,11 @@ import {
   NFT,
   NOW,
   NOW_SECONDS,
+  names,
   OTHER,
+  only,
   options,
+  rejects,
   SIGNER,
   shape,
   UNISWAP_ROUTER,
@@ -78,7 +82,11 @@ const always = (descriptor: unknown) => ({
 })
 
 const described = (result: ClearSigning) => {
-  assert.equal(result.source.kind, 'descriptor', `read by the descriptor: ${codes(result).join(', ')}`)
+  assert.equal(
+    result.source.kind,
+    'descriptor',
+    `read by the descriptor: ${result.warnings.map(entry => `${entry.code} ${JSON.stringify(entry.params ?? {})}`).join(', ')}`
+  )
 
   return result
 }
@@ -152,40 +160,49 @@ describe('ERC-7730 field formats', () => {
     assert.deepEqual(codes(result), [])
   })
 
-  test('formats that cannot read their value: the value raw, ethereum.UNREADABLE_FIELD on it', async () => {
-    const cases: readonly [string, Record<string, unknown>, unknown[]][] = [
-      ['an unknown format', {format: 'holographic', label: 'X', path: 'amount'}, []],
-      ['an encrypted value', {encryption: {scheme: 'fhe'}, format: 'tokenAmount', label: 'X', path: 'amount'}, []],
+  test('formats that cannot read their value: the value raw, ethereum.UNREADABLE_FIELD on it with the reason', async () => {
+    const cases: readonly [string, Record<string, unknown>, string | undefined][] = [
+      ['an unknown format', {format: 'holographic', label: 'X', path: 'amount'}, undefined],
+      [
+        'an encrypted value',
+        {
+          encryption: {fallbackLabel: 'Hidden', plaintextType: 'uint256', scheme: 'fhevm'},
+          format: 'tokenAmount',
+          label: 'X',
+          path: 'amount',
+        },
+        'DECRYPTION_FAILED',
+      ],
       [
         'an enum without the key',
         {format: 'enum', label: 'X', params: {$ref: '$.metadata.enums.kind'}, path: 'kind'},
-        [],
+        'FORMAT_PARAM_RESOLUTION_ERROR',
       ],
+      ['an address that is text', {format: 'addressName', label: 'X', path: 'note'}, 'ARGUMENT_TYPE_MISMATCH'],
+      ['a token ticker of text', {format: 'tokenTicker', label: 'X', path: 'note'}, 'ARGUMENT_TYPE_MISMATCH'],
+      ['a malformed ERC-7930 address', {format: 'interoperableAddressName', label: 'X', path: 'data'}, undefined],
+      ['call data without a callee', {format: 'calldata', label: 'X', path: 'data'}, 'FORMAT_PARAM_RESOLUTION_ERROR'],
       [
-        'an enum without a table',
-        {format: 'enum', label: 'X', params: {$ref: '$.metadata.enums.none'}, path: 'kind'},
-        [],
+        'a date of text',
+        {format: 'date', label: 'X', params: {encoding: 'timestamp'}, path: 'note'},
+        'ARGUMENT_TYPE_MISMATCH',
       ],
-      ['a unit with no base', {format: 'unit', label: 'X', path: 'amount'}, []],
-      [
-        'a unit with decimals past 77',
-        {format: 'unit', label: 'X', params: {base: 'X', decimals: 78}, path: 'amount'},
-        [],
-      ],
-      ['an address that is not one', {format: 'addressName', label: 'X', path: 'amount'}, []],
-      ['a token ticker of a number past 160 bits', {format: 'tokenTicker', label: 'X', path: 'amount'}, []],
-      ['a malformed ERC-7930 address', {format: 'interoperableAddressName', label: 'X', path: 'data'}, []],
-      ['call data without a callee', {format: 'calldata', label: 'X', path: 'data'}, []],
-      ['a date of text', {format: 'date', label: 'X', path: 'note'}, []],
-      ['an amount of text', {format: 'tokenAmount', label: 'X', path: 'note'}, []],
+      ['a date without an encoding', {format: 'date', label: 'X', path: 'amount'}, 'UNKNOWN_ENCODING'],
+      ['an amount of text', {format: 'tokenAmount', label: 'X', path: 'note'}, 'ARGUMENT_TYPE_MISMATCH'],
     ]
     const signature = 'act(uint256 amount,uint8 kind,bytes data,string note)'
     const data = encode(signature, [MAX, 9, '0x0001000001', 'soon'])
 
-    for (const [why, node] of cases) {
-      const result = described(await read(one(signature, [node], {}), data))
+    for (const [why, node, reason] of cases) {
+      const result = described(
+        await read(vault({[signature]: {fields: [node], intent: 'Act'}}, {enums: {kind: {'1': 'One'}}}), data)
+      )
       const id = `data.${String(node.path)}`
-      assert.deepEqual(shape(result), [`ethereum.UNREADABLE_FIELD medium  ${id}`], why)
+      assert.deepEqual(
+        result.warnings.map(entry => [entry.code, entry.severity, entry.fields, entry.params?.code]),
+        [['ethereum.UNREADABLE_FIELD', 'medium', [id], reason]],
+        why
+      )
       assert.ok(findField(result, id), why)
     }
   })
@@ -217,7 +234,7 @@ describe('ERC-7730 field formats', () => {
     const descriptor = one(signature, [
       {format: 'chainId', label: 'Chain', path: 'chain'},
       {format: 'duration', label: 'Lock', path: 'period'},
-      {format: 'date', label: 'When', path: 'when'},
+      {format: 'date', label: 'When', params: {encoding: 'timestamp'}, path: 'when'},
     ])
     const result = described(await read(descriptor, encode(signature, [999_999_999n, MAX, -5n])))
     assert.equal(fieldOf(result, 'data.chain', 'text').value, 'eip155:999999999')
@@ -232,7 +249,7 @@ describe('ERC-7730 field formats', () => {
 })
 
 describe('ERC-7730 addresses and amounts', () => {
-  test('addressName: an address from a word or an integer; the sender`s placeholder is the sender', async () => {
+  test('addressName: an address from a slice or an integer; the sender`s placeholder is the sender', async () => {
     const signature = 'swap(address recipient,bytes32 word,uint256 number)'
     const descriptor = one(signature, [
       {
@@ -241,7 +258,7 @@ describe('ERC-7730 addresses and amounts', () => {
         params: {senderAddress: ['0x0000000000000000000000000000000000000001']},
         path: 'recipient',
       },
-      {format: 'addressName', label: 'Word', path: 'word'},
+      {format: 'addressName', label: 'Word', path: 'word.[-20:]'},
       {format: 'addressName', label: 'Number', path: 'number'},
     ])
     const result = described(
@@ -254,14 +271,38 @@ describe('ERC-7730 addresses and amounts', () => {
       [fieldOf(result, 'data.recipient', 'address').value, fieldOf(result, 'data.recipient', 'address').relation],
       [SIGNER, 'self']
     )
-    assert.equal(fieldOf(result, 'data.word', 'address').value, OTHER)
+    assert.equal(fieldOf(result, 'data.word.-20', 'address').value, OTHER)
     assert.deepEqual(
       [fieldOf(result, 'data.number', 'address').value, fieldOf(result, 'data.number', 'address').relation],
       [USDC, 'token']
     )
+    assert.deepEqual(codes(result), [])
     // Near miss: another address is itself.
     const other = described(await read(descriptor, encode(signature, [OTHER, pad(OTHER), 0n])))
     assert.equal(fieldOf(other, 'data.recipient', 'address').relation, 'unknown')
+    // A whole word is not an address: the reference reads one from a slice of it.
+    const word = described(
+      await read(
+        one(signature, [{format: 'addressName', label: 'Word', path: 'word'}]),
+        encode(signature, [OTHER, pad(OTHER), 0n])
+      )
+    )
+    assert.equal(only(word, 'ethereum.UNREADABLE_FIELD').params?.code, 'ARGUMENT_TYPE_MISMATCH')
+  })
+
+  test('addressName types: ethereum.ADDRESS_TYPE_MISMATCH when the names resolver contradicts them', async () => {
+    const signature = 'pay(address to)'
+    const descriptor = one(signature, [{format: 'addressName', label: 'To', params: {types: ['eoa']}, path: 'to'}])
+    const known = {resolvers: {names: names({[OTHER.toLowerCase()]: {name: 'Some router', relation: 'contract'}})}}
+    const result = described(await read(descriptor, encode(signature, [OTHER]), known))
+    assert.deepEqual(shape(result), ['ethereum.ADDRESS_TYPE_MISMATCH medium  data.to'])
+    assert.equal(fieldOf(result, 'data.to', 'address').name, 'Some router')
+    // Near misses: a contract where a contract may be, an address nobody names.
+    const contract = one(signature, [
+      {format: 'addressName', label: 'To', params: {types: ['eoa', 'contract']}, path: 'to'},
+    ])
+    assert.deepEqual(codes(described(await read(contract, encode(signature, [OTHER]), known))), [])
+    assert.deepEqual(codes(described(await read(descriptor, encode(signature, [OTHER])))), [])
   })
 
   test('tokenAmount: a token by path, constant, descriptor constant or map; the chain`s native address; unknown tokens', async () => {
@@ -301,9 +342,11 @@ describe('ERC-7730 addresses and amounts', () => {
 
     const unknown = await amountWith({tokenPath: 'token'}, UNKNOWN_TOKEN)
     assert.deepEqual(shape(unknown.result), ['UNKNOWN_TOKEN medium  data.amount'])
+    assert.equal(unknown.amount.token, UNKNOWN_TOKEN)
+    // No token named at all: the amount in base units, unreadable as the descriptor says.
     const none = await amountWith({})
     assert.equal(none.amount.token, undefined)
-    assert.deepEqual(shape(none.result), ['UNKNOWN_TOKEN medium  data.amount'])
+    assert.deepEqual(shape(none.result), ['ethereum.UNREADABLE_FIELD medium  data.amount'])
 
     // A map without an entry for the key: the descriptor does not apply.
     const unmapped = await read(
@@ -326,6 +369,7 @@ describe('ERC-7730 addresses and amounts', () => {
       encode(signature, [USDC, 1n, 3])
     )
     assert.deepEqual(codes(unmapped).sort(), ['UNKNOWN_CONTRACT_CALL', 'ethereum.INVALID_DESCRIPTOR'])
+    assert.equal(only(unmapped, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'INVALID_DESCRIPTOR')
   })
 
   test('a threshold: ethereum.UNLIMITED_AMOUNT and unlimited at or past it, not below', async () => {
@@ -347,25 +391,29 @@ describe('ERC-7730 addresses and amounts', () => {
     assert.deepEqual(codes(below), [])
   })
 
-  test('the descriptor`s own token stands for the contract itself, when no list has it; never for another token', async () => {
+  test('the descriptor`s own token: by $.metadata.token, or for the contract itself when no list has it', async () => {
     const signature = 'deposit(address token,uint256 assets)'
-    const descriptor = vault(
-      {
-        [signature]: {
-          fields: [{format: 'tokenAmount', label: 'Assets', params: {tokenPath: 'token'}, path: 'assets'}],
-          intent: 'Deposit',
+    const descriptor = (params: Record<string, unknown>) =>
+      vault(
+        {
+          [signature]: {
+            fields: [{format: 'tokenAmount', label: 'Assets', params, path: 'assets'}],
+            intent: 'Deposit',
+          },
         },
-      },
-      {token: {decimals: 6, name: 'Vault share', ticker: 'vUSD'}}
-    )
-    const own = described(await read(descriptor, encode(signature, [VAULT, 5_000_000n])))
-    assert.deepEqual(
-      [fieldOf(own, 'data.assets', 'amount').symbol, fieldOf(own, 'data.assets', 'amount').decimals],
-      ['vUSD', 6]
-    )
-    assert.deepEqual(codes(own), [])
+        {token: {decimals: 6, name: 'Vault share', ticker: 'vUSD'}}
+      )
 
-    const another = described(await read(descriptor, encode(signature, [UNKNOWN_TOKEN, 5_000_000n])))
+    for (const params of [{token: '$.metadata.token'}, {tokenPath: 'token'}]) {
+      const own = described(await read(descriptor(params), encode(signature, [VAULT, 5_000_000n])))
+      const assets = fieldOf(own, 'data.assets', 'amount')
+      assert.deepEqual([assets.symbol, assets.decimals, assets.token], ['vUSD', 6, VAULT], JSON.stringify(params))
+      assert.deepEqual(codes(own), [])
+    }
+
+    const another = described(
+      await read(descriptor({tokenPath: 'token'}), encode(signature, [UNKNOWN_TOKEN, 5_000_000n]))
+    )
     assert.deepEqual(shape(another), ['UNKNOWN_TOKEN medium  data.assets'])
   })
 
@@ -460,22 +508,21 @@ describe('ERC-7730 addresses and amounts', () => {
 })
 
 describe('ERC-7730 visibility, groups and paths', () => {
-  test('always, optional, never, ifNotIn, mustMatch; what nothing mentions is shown behind "More details"', async () => {
-    const signature = 'act(uint256 a,uint256 b,uint256 c,uint256 d,uint256 e,uint256 f)'
+  test('always, optional (behind "More details"), never, ifNotIn, mustMatch', async () => {
+    const signature = 'act(uint256 a,uint256 b,uint256 c,uint256 d,uint256 e)'
     const descriptor = one(signature, [
-      {label: 'A', path: 'a'},
-      {label: 'B', path: 'b', visible: 'optional'},
-      {label: 'C', path: 'c', visible: 'never'},
-      {label: 'D', path: 'd', visible: {ifNotIn: ['0', 0]}},
-      {label: 'E', path: 'e', visible: {mustMatch: [7]}},
+      {format: 'raw', label: 'A', path: 'a'},
+      {format: 'raw', label: 'B', path: 'b', visible: 'optional'},
+      {format: 'raw', label: 'C', path: 'c', visible: 'never'},
+      {format: 'raw', label: 'D', path: 'd', visible: {ifNotIn: ['0', 0]}},
+      {format: 'raw', label: 'E', path: 'e', visible: {mustMatch: [7]}},
     ])
-    const result = described(await read(descriptor, encode(signature, [1n, 2n, 3n, 0n, 7n, 6n])))
+    const result = described(await read(descriptor, encode(signature, [1n, 2n, 3n, 0n, 7n])))
     assert.deepEqual(
       result.fields.map(entry => [entry.id, entry.secondary ?? false]),
       [
         ['data.a', false],
         ['data.b', true],
-        ['data.f', true],
         ['contract', false],
         ['maxFee', false],
         ['gasLimit', true],
@@ -485,56 +532,46 @@ describe('ERC-7730 visibility, groups and paths', () => {
         ['transactionType', true],
       ]
     )
-    assert.deepEqual(field(result, 'data.f').label, {code: 'external', text: 'f'})
 
     // ifNotIn shows a value outside the list.
-    assert.ok(findField(described(await read(descriptor, encode(signature, [1n, 2n, 3n, 4n, 7n, 6n]))), 'data.d'))
+    assert.ok(findField(described(await read(descriptor, encode(signature, [1n, 2n, 3n, 4n, 7n]))), 'data.d'))
     // mustMatch fails the whole descriptor when the value differs.
-    assert.deepEqual(codes(await read(descriptor, encode(signature, [1n, 2n, 3n, 0n, 8n, 6n]))).sort(), [
-      'UNKNOWN_CONTRACT_CALL',
-      'ethereum.INVALID_DESCRIPTOR',
-    ])
+    const mismatch = await read(descriptor, encode(signature, [1n, 2n, 3n, 0n, 8n]))
+    assert.deepEqual(codes(mismatch).sort(), ['UNKNOWN_CONTRACT_CALL', 'ethereum.INVALID_DESCRIPTOR'])
+    assert.equal(only(mismatch, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'MUSTMATCH_VIOLATION')
   })
 
-  test('version 1: required paths a field must show, excluded paths none may', async () => {
-    const signature = 'act(uint256 a,uint256 b)'
-    const v1 = (format: Record<string, unknown>): Erc7730Descriptor => ({
+  test('version 1 descriptors (an ABI, formats by name or selector) are not read: the reference reads version 2', async () => {
+    const v1: Erc7730Descriptor = {
       $schema: 'https://github.com/LedgerHQ/clear-signing-erc7730-registry/specs/erc7730-v1.schema.json',
-      context: {contract: {deployments: [{address: VAULT, chainId: 1}]}},
-      display: {formats: {[signature]: {intent: 'Act', ...format}}},
+      context: {
+        contract: {
+          abi: [{inputs: [{name: 'shares', type: 'uint256'}], name: 'redeem', type: 'function'}],
+          deployments: [{address: VAULT, chainId: 1}],
+        },
+      },
+      display: {formats: {'0xdb006a75': {fields: [{label: 'Shares', path: 'shares'}], intent: 'Redeem'}}},
       metadata: {owner: 'Vault'},
-    })
-
-    const required = described(
-      await read(v1({fields: [{label: 'A', path: 'a'}], required: ['a', 'b']}), encode(signature, [1n, 2n]))
-    )
-    assert.deepEqual(shape(required), ['ethereum.UNREADABLE_FIELD medium  '])
-
-    const excluded = described(
-      await read(
-        v1({
-          excluded: ['b'],
-          fields: [
-            {label: 'A', path: 'a'},
-            {label: 'B', path: 'b'},
-          ],
-        }),
-        encode(signature, [1n, 2n])
-      )
-    )
-    assert.ok(!findField(excluded, 'data.b'))
-    assert.deepEqual(codes(excluded), [])
+    }
+    assert.deepEqual(createDescriptorResolver([{descriptor: v1, path: 'app/v1.json'}]).rejected, [
+      {path: 'app/v1.json', reason: 'A format of a contract is keyed by a function signature.'},
+    ])
+    const result = await call(VAULT, encode('redeem(uint256)', [7n]), {resolvers: {descriptors: always(v1)}})
+    assert.deepEqual(shape(result), ['UNKNOWN_CONTRACT_CALL high  contract', 'ethereum.INVALID_DESCRIPTOR low  '])
+    assert.equal(only(result, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'INVALID_DESCRIPTOR')
   })
 
-  test('groups: sequential under a path with a label, bundled element by element', async () => {
+  test('groups: under a path with a label, element by element; bundled arrays paired by index', async () => {
     const signature = 'place((address token,uint256 amount)[] orders,address owner)'
     const orders = [
       {amount: 1_000_000n, token: USDC},
       {amount: 10n ** 18n, token: WETH},
     ]
     const data = encode(signature, [orders, SIGNER])
+    const pairs = (result: ClearSigning) =>
+      fieldOf(result, 'group.0', 'list').items.map(item => [item.id, item.kind === 'amount' ? item.symbol : item.kind])
 
-    const sequential = described(
+    const byElement = described(
       await read(
         one(signature, [
           {
@@ -550,57 +587,72 @@ describe('ERC-7730 visibility, groups and paths', () => {
         data
       )
     )
-    const group = fieldOf(sequential, 'group.orders.all', 'list')
-    assert.deepEqual(group.label, {code: 'external', text: 'Orders'})
-    assert.deepEqual(
-      group.items.map(item => item.id),
-      ['data.orders.token.all', 'data.orders.amount.all']
-    )
+    assert.deepEqual(fieldOf(byElement, 'group.0', 'list').label, {code: 'external', text: 'Orders'})
     // Each amount with its own order's token.
-    assert.deepEqual(
-      fieldOf(sequential, 'data.orders.amount.all', 'list').items.map(item =>
-        item.kind === 'amount' ? item.symbol : ''
-      ),
-      ['USDC', 'WETH']
-    )
-    assert.equal(fieldOf(sequential, 'data.owner', 'address').relation, 'self')
+    assert.deepEqual(pairs(byElement), [
+      ['data.orders.0.token', 'text'],
+      ['data.orders.0.amount', 'USDC'],
+      ['data.orders.1.token', 'text'],
+      ['data.orders.1.amount', 'WETH'],
+    ])
+    assert.equal(fieldOf(byElement, 'data.owner', 'address').relation, 'self')
 
     const bundled = described(
       await read(
         one(signature, [
           {
             fields: [
-              {format: 'tokenTicker', label: 'Token', path: 'token'},
-              {format: 'tokenAmount', label: 'Amount', params: {tokenPath: 'token'}, path: 'amount'},
+              {format: 'tokenTicker', label: 'Token', path: 'orders.[].token'},
+              {
+                format: 'tokenAmount',
+                label: 'Amount',
+                params: {tokenPath: 'orders.[].token'},
+                path: 'orders.[].amount',
+              },
             ],
             iteration: 'bundled',
             label: 'Order',
-            path: 'orders.[]',
           },
-          {label: 'Owner', path: 'owner'},
+          {format: 'raw', label: 'Owner', path: 'owner'},
         ]),
         data
       )
     )
+    assert.deepEqual(pairs(bundled), pairs(byElement))
+
+    // A field of every element, without a group: one list, an item per element.
+    const amounts = described(
+      await read(
+        one(signature, [
+          {format: 'tokenAmount', label: 'Amounts', params: {tokenPath: 'orders.[].token'}, path: 'orders.[].amount'},
+        ]),
+        data
+      )
+    )
+    const list = fieldOf(amounts, 'data.orders.amount.all', 'list')
+    assert.deepEqual(list.label, {code: 'external', text: 'Amounts'})
     assert.deepEqual(
-      bundled.fields
-        .slice(0, 2)
-        .map(entry => [entry.id, entry.kind === 'list' ? entry.items.map(item => item.id) : []]),
+      list.items.map(item => [item.id, item.label.text, item.kind === 'amount' ? item.value : 0n]),
       [
-        ['group.orders.0', ['data.orders.0.token', 'data.orders.0.amount']],
-        ['group.orders.1', ['data.orders.1.token', 'data.orders.1.amount']],
+        ['data.orders.0.amount', 'Item 1', 1_000_000n],
+        ['data.orders.1.amount', 'Item 2', 10n ** 18n],
       ]
     )
-    assert.equal(fieldOf(bundled, 'data.orders.1.amount', 'amount').symbol, 'WETH')
+
+    // Groups inside groups are not in the reference's reading of the standard: the descriptor is not used.
+    const nested = await read(
+      one(signature, [{fields: [{fields: [{format: 'raw', label: 'Owner', path: 'owner'}]}], label: 'Outer'}]),
+      data
+    )
+    assert.equal(only(nested, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'UNSUPPORTED_NESTED_FIELD_GROUP')
   })
 
-  test('slices and indexes of arrays and bytes; parameters aligned item by item', async () => {
+  test('slices of bytes, indexes of arrays; parameters aligned item by item, or the descriptor is not used', async () => {
     const signature = 'split(address[] tokens,uint256[] amounts,bytes data)'
     const descriptor = one(signature, [
       {format: 'tokenAmount', label: 'Amounts', params: {tokenPath: 'tokens.[]'}, path: 'amounts.[]'},
-      {label: 'Middle', path: 'amounts.[1:3]'},
-      {label: 'Last', path: 'amounts.[-1]'},
-      {label: 'Selector', path: 'data.[0:4]'},
+      {format: 'raw', label: 'Last', path: 'amounts.[-1]'},
+      {format: 'raw', label: 'Selector', path: 'data.[0:4]'},
     ])
     const tokens = [USDC, WETH, USDC]
     const result = described(
@@ -619,25 +671,17 @@ describe('ERC-7730 visibility, groups and paths', () => {
         ['data.amounts.2', 'USDC', 2_000_000n],
       ]
     )
-    assert.deepEqual(
-      fieldOf(result, 'data.amounts.all-2', 'list').items.map(item => (item.kind === 'number' ? item.value : 0n)),
-      [10n ** 18n, 2_000_000n]
-    )
-    assert.equal(fieldOf(result, 'data.amounts.2-2', 'number').value, 2_000_000n)
-    assert.equal(fieldOf(result, 'data.data', 'raw').value, '0xa9059cbb')
+    assert.equal(fieldOf(result, 'data.amounts.-1', 'number').value, 2_000_000n)
+    assert.equal(fieldOf(result, 'data.data.0-4', 'raw').value, '0xa9059cbb')
 
-    // Tokens and amounts of different lengths: no token is guessed.
-    const misaligned = described(await read(descriptor, encode(signature, [[USDC, WETH], [1n, 2n, 3n], '0x12345678'])))
-    assert.deepEqual(
-      fieldOf(misaligned, 'data.amounts.all', 'list').items.map(item => (item.kind === 'amount' ? item.symbol : 'x')),
-      [undefined, undefined, undefined]
-    )
-    assert.ok(codes(misaligned).includes('UNKNOWN_TOKEN'))
+    // Tokens and amounts of different lengths: no token is guessed, the descriptor is not used.
+    const misaligned = await read(descriptor, encode(signature, [[USDC, WETH], [1n, 2n, 3n], '0x12345678']))
+    assert.equal(only(misaligned, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'PARAM_ARRAY_SIZE_MISMATCH')
   })
 })
 
 describe('ERC-7730 words', () => {
-  test('interpolated intents: every placeholder read, or no summary at all; {{ and }} escape', async () => {
+  test('interpolated intents: every placeholder read, or no summary at all; {{ and }} escape; arrays joined', async () => {
     const signature = 'send(address to,uint256 amount,address[] path)'
     const data = encode(signature, [OTHER, 1_500_000n, [USDC, WETH]])
     const summary = async (template: string) =>
@@ -648,7 +692,7 @@ describe('ERC-7730 words', () => {
             [
               {format: 'addressName', label: 'To', path: 'to'},
               {format: 'tokenAmount', label: 'Amount', params: {token: USDC}, path: 'amount'},
-              {label: 'Path', path: 'path'},
+              {format: 'raw', label: 'Path', path: 'path.[]'},
               {format: 'amount', label: 'Value', path: '@.value'},
             ],
             {interpolatedIntent: template}
@@ -664,13 +708,14 @@ describe('ERC-7730 words', () => {
     assert.equal((await summary('Send {#.amount} ({@.value})'))?.text, 'Send 1.5 USDC (0 ETH)')
     assert.equal((await summary('{{literal}} {amount} }}'))?.text, '{literal} 1.5 USDC }')
     assert.equal((await summary('{ amount }'))?.text, '1.5 USDC')
+    assert.equal((await summary('Via {path}'))?.text, `Via ${USDC} and ${WETH}`)
 
-    for (const broken of ['Send {missing}', 'Send } {amount}', 'Send {amount', 'Via {path}']) {
+    for (const broken of ['Send {missing}', 'Send {amount', 'Send {}']) {
       assert.equal(await summary(broken), undefined, broken)
     }
   })
 
-  test('hidden characters in a descriptor`s words: HIDDEN_CHARACTERS where they are', async () => {
+  test('hidden characters in a descriptor`s words and in the data it shows: HIDDEN_CHARACTERS where they are', async () => {
     const signature = 'act(uint8 kind,uint256 amount,string note)'
     const data = encode(signature, [1, 5n, 'plain'])
     const result = described(
@@ -680,13 +725,13 @@ describe('ERC-7730 words', () => {
             [signature]: {
               fields: [
                 {format: 'enum', label: 'Kind', params: {$ref: '$.metadata.enums.kind'}, path: 'kind'},
-                {label: 'Amo‮unt', path: 'amount'},
-                {fields: [{label: 'Note', path: 'note'}], label: 'Det​ails'},
+                {format: 'raw', label: 'Amo\u202eunt', path: 'amount'},
+                {fields: [{format: 'raw', label: 'Note', path: 'note'}], label: 'Det\u200bails'},
               ],
-              intent: 'Sta⁦ke',
+              intent: 'Sta\u2066ke',
             },
           },
-          {enums: {kind: {'1': 'Dep‭osit'}}, owner: 'Vau‮lt'}
+          {enums: {kind: {'1': 'Dep\u202dosit'}}, owner: 'Vau\u202elt'}
         ),
         data
       )
@@ -695,19 +740,23 @@ describe('ERC-7730 words', () => {
       'HIDDEN_CHARACTERS medium  ',
       'HIDDEN_CHARACTERS medium  data.amount',
       'HIDDEN_CHARACTERS medium  data.kind',
-      'HIDDEN_CHARACTERS medium  group.fields',
+      'HIDDEN_CHARACTERS medium  group.2',
     ])
     // An owner with hidden characters does not name the contract.
     assert.equal(fieldOf(result, 'contract', 'address').relation, 'unknown')
 
-    // Text in the call data itself, shown by a descriptor.
-    const note = described(
-      await read(
-        vault({[signature]: {fields: [{label: 'Note', path: 'note'}], intent: 'Act'}}),
-        encode(signature, [1, 5n, 'pay ‮me'])
+    // Text in the call data itself, shown by a descriptor: decoded as UTF-8, as it was signed.
+    const shown = async (note: string) =>
+      described(
+        await read(
+          vault({[signature]: {fields: [{format: 'raw', label: 'Note', path: 'note'}], intent: 'Act'}}),
+          encode(signature, [1, 5n, note])
+        )
       )
-    )
-    assert.ok(shape(note).includes('HIDDEN_CHARACTERS medium  data.note'))
+    const hidden = await shown('pay \u202eme')
+    assert.equal(fieldOf(hidden, 'data.note', 'text').value, 'pay \u202eme')
+    assert.deepEqual(shape(hidden), ['HIDDEN_CHARACTERS medium  data.note'])
+    assert.equal(fieldOf(await shown('Zaplaťte 5 €'), 'data.note', 'text').value, 'Zaplaťte 5 €')
   })
 })
 
@@ -719,29 +768,38 @@ describe('ERC-7730 binding', () => {
 
   test('a descriptor the resolver answers but that does not bind is not believed', async () => {
     const elsewhere = (deployments: unknown[]) => ({
-      ...one(signature, [{label: 'Amount', path: 'amount'}]),
+      ...one(signature, [{format: 'raw', label: 'Amount', path: 'amount'}]),
       context: {contract: {deployments}},
     })
 
-    for (const descriptor of [
-      elsewhere([{address: OTHER, chainId: 1}]),
-      elsewhere([{address: VAULT, chainId: 10}]),
-      elsewhere([]),
-      one('unstake(uint256 amount)', [{label: 'Amount', path: 'amount'}]),
-      {context: {eip712: {deployments: [{address: VAULT, chainId: 1}]}}, display: {formats: {}}},
-      'not a descriptor',
-      one(signature, [{label: 'Amount', path: 'amountt'}]),
-    ]) {
-      invalid(await call(VAULT, data, {resolvers: {descriptors: always(descriptor)}}))
+    for (const [descriptor, reason] of [
+      [elsewhere([{address: OTHER, chainId: 1}]), 'DEPLOYMENT_MISMATCH'],
+      [elsewhere([{address: VAULT, chainId: 10}]), 'DEPLOYMENT_MISMATCH'],
+      [elsewhere([]), 'DEPLOYMENT_MISMATCH'],
+      [one('unstake(uint256 amount)', [{format: 'raw', label: 'Amount', path: 'amount'}]), 'NO_FORMAT_MATCH'],
+      [
+        {context: {eip712: {deployments: [{address: VAULT, chainId: 1}]}}, display: {formats: {}}},
+        'DEPLOYMENT_MISMATCH',
+      ],
+      ['not a descriptor', 'INVALID_DESCRIPTOR'],
+      [{...one(signature, []), includes: 'common.json'}, 'INVALID_DESCRIPTOR'],
+      [one(signature, [{format: 'raw', label: 'Amount', path: 'amountt'}]), 'INVALID_DESCRIPTOR'],
+      [one(signature, [{label: 'Amount', path: 'amount'}]), 'INVALID_DESCRIPTOR'],
+    ] as const) {
+      const result = await call(VAULT, data, {resolvers: {descriptors: always(descriptor)}})
+      invalid(result)
+      assert.equal(only(result, 'ethereum.INVALID_DESCRIPTOR').params?.code, reason, JSON.stringify(descriptor))
     }
   })
 
   test('call data that does not decode as the descriptor`s function is not read by it', async () => {
-    const descriptor = one(signature, [{label: 'Amount', path: 'amount'}])
+    const descriptor = one(signature, [{format: 'raw', label: 'Amount', path: 'amount'}])
     invalid(await read(descriptor, data.slice(0, -2) as Hex))
-    // A bool word of 2 is not a bool.
-    const flag = one('act(bool flag)', [{label: 'Flag', path: 'flag'}])
-    invalid(await read(flag, `${encode('act(bool flag)', [true]).slice(0, -2)}02` as Hex))
+    // A bool word of 2 is not a bool: the package's strict decoder refuses it before the reference sees it.
+    const flag = one('act(bool flag)', [{format: 'raw', label: 'Flag', path: 'flag'}])
+    const two = await read(flag, `${encode('act(bool flag)', [true]).slice(0, -2)}02` as Hex)
+    invalid(two)
+    assert.equal(only(two, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'CALLDATA_DECODE_ERROR')
     assert.equal(described(await read(flag, encode('act(bool flag)', [true]))).fields[0]?.kind, 'boolean')
   })
 
@@ -778,43 +836,7 @@ describe('ERC-7730 binding', () => {
     assert.deepEqual(steth.source, {decoder: 'erc20', kind: 'builtin'})
   })
 
-  test('version 1: a call read by a format named by function name or selector, its parameters named by the ABI', async () => {
-    const abi = [
-      {
-        inputs: [
-          {name: 'amount', type: 'uint256'},
-          {name: 'beneficiary', type: 'address'},
-        ],
-        name: 'deposit',
-        type: 'function',
-      },
-      {inputs: [{name: 'shares', type: 'uint256'}], name: 'redeem', type: 'function'},
-    ]
-    const v1: Erc7730Descriptor = {
-      $schema: 'https://github.com/LedgerHQ/clear-signing-erc7730-registry/specs/erc7730-v1.schema.json',
-      context: {contract: {abi, deployments: [{address: VAULT, chainId: 1}]}},
-      display: {
-        formats: {
-          '0xdb006a75': {fields: [{label: 'Shares', path: 'shares'}], intent: 'Redeem'},
-          deposit: {
-            fields: [
-              {format: 'tokenAmount', label: 'Amount', params: {token: USDC}, path: 'amount'},
-              {format: 'addressName', label: 'For', path: 'beneficiary'},
-            ],
-            intent: 'Deposit',
-          },
-        },
-      },
-      metadata: {owner: 'Vault'},
-    }
-    const deposit = described(await read(v1, encode('deposit(uint256,address)', [1_000_000n, SIGNER])))
-    assert.deepEqual([deposit.intent.text, fieldOf(deposit, 'data.amount', 'amount').symbol], ['Deposit', 'USDC'])
-    assert.equal(fieldOf(deposit, 'data.beneficiary', 'address').relation, 'self')
-    const redeem = described(await read(v1, encode('redeem(uint256)', [7n])))
-    assert.deepEqual([redeem.intent.text, fieldOf(redeem, 'data.shares', 'number').value], ['Redeem', 7n])
-  })
-
-  test('typed data: bound by deployments, by domain, by domain separator, and by version 1 schemas', async () => {
+  test('typed data: bound by deployments, by domain, by domain separator; a verifying contract needed', async () => {
     const order: TypedDataDefinition = {
       domain: {chainId: 1, name: 'Orders', verifyingContract: VAULT, version: '1'},
       message: {amount: 5n, maker: SIGNER},
@@ -826,26 +848,37 @@ describe('ERC-7730 binding', () => {
         ],
       },
     }
-    const format = {'Order(address maker,uint256 amount)': {fields: [{label: 'Maker', path: 'maker'}], intent: 'Order'}}
-    const sign = (context: Record<string, unknown>, formats: Record<string, unknown> = format, typed = order) =>
+    const format = {
+      'Order(address maker, uint256 amount)': {
+        fields: [
+          {format: 'addressName', label: 'Maker', path: 'maker'},
+          {format: 'raw', label: 'Amount', path: 'amount', visible: 'optional'},
+        ],
+        intent: 'Order',
+      },
+    }
+    const sign = (context: Record<string, unknown>, typed = order) =>
       clearSignTypedData(
         mainnet,
         typed,
-        options({resolvers: {descriptors: always({context: {eip712: context}, display: {formats}})}})
+        options({resolvers: {descriptors: always({context: {eip712: context}, display: {formats: format}})}})
       )
     const separator = `0x${Buffer.from(mainnet.hashDomain({domain: order.domain ?? {}})).toString('hex')}`
 
     for (const context of [
       {deployments: [{address: VAULT, chainId: 1}]},
-      {domain: {name: 'Orders', verifyingContract: VAULT.toUpperCase().replace('0X', '0x')}},
+      {domain: {name: 'Orders', verifyingContract: VAULT}},
       {domain: {chainId: '1', version: '1'}},
       {domainSeparator: separator},
     ]) {
       const result = await sign(context)
       assert.equal(result.source.kind, 'descriptor', JSON.stringify(context))
       assert.equal(fieldOf(result, 'data.maker', 'address').relation, 'self')
-      // The uncovered member is still shown.
-      assert.equal(fieldOf(result, 'data.amount', 'number').secondary, true)
+      // A key spaced otherwise is the same type; optional is behind "More details".
+      assert.deepEqual(
+        [fieldOf(result, 'data.amount', 'number').value, field(result, 'data.amount').secondary],
+        [5n, true]
+      )
     }
 
     for (const context of [
@@ -863,46 +896,22 @@ describe('ERC-7730 binding', () => {
       )
     }
 
-    const v1 = await clearSignTypedData(
-      mainnet,
-      order,
-      options({
-        resolvers: {
-          descriptors: always({
-            $schema: 'erc7730-v1.schema.json',
-            context: {
-              eip712: {
-                deployments: [{address: VAULT, chainId: 1}],
-                schemas: [{primaryType: 'Order', types: {EIP712Domain: [], Order: order.types.Order}}],
-              },
-            },
-            display: {formats: {Order: {fields: [{label: 'Maker', path: 'maker'}], intent: 'Order'}}},
-          }),
-        },
-      })
-    )
-    assert.equal(v1.source.kind, 'descriptor')
+    // Without a verifying contract, the reference cannot read it.
+    const anywhere = await sign({domain: {name: 'Orders'}}, {...order, domain: {chainId: 1, name: 'Orders'}})
+    assert.equal(only(anywhere, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'UNSUPPORTED_DOMAIN')
 
-    // A schema of other members does not bind.
-    const otherSchema = await clearSignTypedData(
-      mainnet,
-      order,
-      options({
-        resolvers: {
-          descriptors: always({
-            $schema: 'erc7730-v1.schema.json',
-            context: {
-              eip712: {
-                deployments: [{address: VAULT, chainId: 1}],
-                schemas: [{primaryType: 'Order', types: {Order: [{name: 'maker', type: 'address'}]}}],
-              },
-            },
-            display: {formats: {Order: {intent: 'Order'}}},
-          }),
-        },
-      })
-    )
-    assert.ok(codes(otherSchema).includes('ethereum.INVALID_DESCRIPTOR'))
+    // Without a signer, a field that shows the signer cannot be read: the descriptor is not used.
+    const sender = {Order: {fields: [{format: 'raw', label: 'From', path: '@.from'}], intent: 'Order'}}
+    const unsigned = await clearSignTypedData(mainnet, order, {
+      resolvers: {
+        clock,
+        descriptors: always({
+          context: {eip712: {deployments: [{address: VAULT, chainId: 1}]}},
+          display: {formats: {[`Order(address maker,uint256 amount)`]: sender.Order}},
+        }),
+      },
+    })
+    assert.equal(only(unsigned, 'ethereum.INVALID_DESCRIPTOR').params?.code, 'CONTAINER_MISSING_REQUIRED_PATH')
   })
 
   test('Permit2`s typed data is read by the built-in even with the registry`s Permit2 descriptor at hand', async () => {
@@ -940,7 +949,7 @@ describe('ERC-7730 binding', () => {
     const result = await call(VAULT, data, {
       resolvers: {
         descriptors: createDescriptorResolver(
-          [{descriptor: one(signature, [{label: 'Amount', path: 'amount'}]), path: 'app/vault.json'}],
+          [{descriptor: one(signature, [{format: 'raw', label: 'Amount', path: 'amount'}]), path: 'app/vault.json'}],
           {publisher: 'Vault Labs'}
         ),
       },
@@ -951,5 +960,137 @@ describe('ERC-7730 binding', () => {
       kind: 'descriptor',
       publisher: 'Vault Labs',
     })
+  })
+})
+
+describe('ERC-7730 online, opted into', () => {
+  const PATH = 'registry/vault/calldata-vault.json'
+  const URL_BASE = 'https://raw.githubusercontent.com/ethereum/clear-signing-erc7730-registry/master/'
+  const AUDITOR = '0x3846c3A30E62075Fa916216b35EF04B8F53931f6'
+  const signature = 'stake(uint256 amount)'
+  const data = encode(signature, [5n])
+  const index = {calldataIndex: {[`eip155:1:${VAULT.toLowerCase()}`]: PATH}, typedDataIndex: {}}
+  const served = one(signature, [{format: 'raw', label: 'Amount', path: 'amount'}])
+
+  /** Runs `body` with `fetch` answering from `files` (404 otherwise), and the URLs it was asked for. */
+  const offline = async (files: Readonly<Record<string, unknown>>, body: () => Promise<void>, fail = false) => {
+    const asked: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input)
+      asked.push(url)
+
+      if (fail) {
+        throw new TypeError('offline')
+      }
+
+      const file = files[url.replace(URL_BASE, '')]
+
+      return file === undefined
+        ? new Response('Not found', {status: 404})
+        : new Response(JSON.stringify(file), {headers: {'content-type': 'application/json'}, status: 200})
+    }) as typeof fetch
+
+    try {
+      await body()
+    } finally {
+      globalThis.fetch = original
+    }
+
+    return asked
+  }
+
+  test('the registry on GitHub, through its index, when the app`s resolver has nothing; nothing fetched before', async () => {
+    let result: ClearSigning | undefined
+    let builtin: ClearSigning | undefined
+    let app: ClearSigning | undefined
+    const asked = await offline({[PATH]: served}, async () => {
+      result = await call(VAULT, data, {sourcify: {registry: {index}}})
+      builtin = await call(USDC, mainnet.erc20.transferData(OTHER, 1n), {sourcify: {registry: {index}}})
+      app = await call(VAULT, data, {
+        resolvers: {descriptors: createDescriptorResolver([{descriptor: served, path: 'app/vault.json'}])},
+        sourcify: {registry: {index}},
+      })
+    })
+    assert.deepEqual(asked, [`${URL_BASE}${PATH}`])
+    assert.deepEqual(result?.source, {
+      format: 'erc7730',
+      id: PATH,
+      kind: 'descriptor',
+      publisher: 'ethereum/clear-signing-erc7730-registry',
+    })
+    assert.equal(result === undefined ? 0n : fieldOf(result, 'data.amount', 'number').value, 5n)
+    assert.deepEqual(builtin?.source, {decoder: 'erc20', kind: 'builtin'})
+    assert.deepEqual(app?.source, {format: 'erc7730', id: 'app/vault.json', kind: 'descriptor'})
+  })
+
+  test('the attestation policy: a descriptor no trusted auditor attests is ethereum.UNTRUSTED_DESCRIPTOR', async () => {
+    let result: ClearSigning | undefined
+    const reads: string[] = []
+    const asked = await offline({[PATH]: served}, async () => {
+      result = await call(VAULT, data, {
+        sourcify: {
+          attestations: {trustedAttesters: [AUDITOR]},
+          chainClient: {
+            call: async (_, request) => {
+              reads.push(request.to)
+
+              return `0x${'00'.repeat(32)}`
+            },
+          },
+          registry: {index},
+        },
+      })
+    })
+    assert.deepEqual(asked, [
+      `${URL_BASE}${PATH}`,
+      `${URL_BASE}registry/vault/sigs/calldata-vault.eip155-1-${AUDITOR}.json`,
+    ])
+    assert.ok(result)
+    assert.deepEqual(shape(result), ['UNKNOWN_CONTRACT_CALL high  contract', 'ethereum.UNTRUSTED_DESCRIPTOR medium  '])
+    assert.equal(only(result, 'ethereum.UNTRUSTED_DESCRIPTOR').params?.code, 'NO_TRUSTED_ATTESTATION')
+    assert.deepEqual(reads, [])
+  })
+
+  test('a registry that cannot be reached is RESOLVER_FAILED, and the call is shown raw', async () => {
+    let result: ClearSigning | undefined
+    await offline(
+      {},
+      async () => {
+        result = await call(VAULT, data, {sourcify: {registry: {index}}})
+      },
+      true
+    )
+    assert.ok(result)
+    assert.deepEqual(shape(result), ['RESOLVER_FAILED info  ', 'UNKNOWN_CONTRACT_CALL high  contract'])
+    assert.deepEqual(only(result, 'RESOLVER_FAILED').params, {resolvers: 'descriptors'})
+  })
+
+  test('trusted tokens: the reference`s templates, never fetched; the built-ins still read their calls first', async () => {
+    let transfer: ClearSigning | undefined
+    let other: ClearSigning | undefined
+    const asked = await offline({}, async () => {
+      const sourcify = {trustedTokens: {1: {[VAULT]: 'erc20' as const}}}
+      transfer = await call(VAULT, mainnet.erc20.transferData(OTHER, 1n), {sourcify})
+      other = await call(VAULT, data, {sourcify})
+    })
+    assert.deepEqual(asked, [])
+    assert.deepEqual(transfer?.source, {decoder: 'erc20', kind: 'builtin'})
+    // The template has no format for this function: nothing describes it, and nothing is wrong with the template.
+    assert.ok(other)
+    assert.deepEqual(shape(other), ['UNKNOWN_CONTRACT_CALL high  contract'])
+  })
+
+  test('the online options are checked: an attestation policy needs a chain client', async () => {
+    for (const sourcify of [
+      {attestations: {trustedAttesters: [AUDITOR]}},
+      {attestations: {trustedAttesters: ['nope']}, chainClient: {call: async () => '0x'}},
+      {registry: 'github'},
+      {registry: {index: {calldataIndex: {}}}},
+      {trustedTokens: []},
+      'github',
+    ]) {
+      await rejects(() => call(VAULT, data, {sourcify: sourcify as never}), 'INVALID_ARGUMENT')
+    }
   })
 })

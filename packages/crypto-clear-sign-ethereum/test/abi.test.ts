@@ -11,7 +11,6 @@ import {
   parseAbiItem,
   toFunctionSelector,
   type AbiParameter as ViemParameter,
-  keccak256 as viemKeccak,
 } from 'viem'
 
 import {
@@ -23,12 +22,10 @@ import {
   canonicalType,
   decodeCall,
   decodeParameters,
-  jsonFunctions,
   MAX_ABI_VALUES,
   parseFunction,
 } from '../src/abi'
 import {BUILTINS} from '../src/calls/builtins'
-import {keccak256} from '../src/keccak'
 
 /** A seeded generator (mulberry32), so a failure reproduces. */
 const random = (seed: number) => {
@@ -185,22 +182,6 @@ const lowered = (value: unknown): unknown => {
 
 const fieldsShape = (fields: readonly AbiField[]) => fields.map(field => viemShape(field.value))
 
-describe('keccak256', () => {
-  test('equals viem over every length around the rate, and random data', () => {
-    for (let length = 0; length <= 300; length++) {
-      const data = Uint8Array.from({length}, (_, index) => (index * 31 + length) & 0xff)
-      assert.equal(bytesToHex(keccak256(data)), viemKeccak(data))
-    }
-
-    const next = random(7)
-
-    for (let run = 0; run < 50; run++) {
-      const data = randomBytes(next, int(next, 2000))
-      assert.equal(bytesToHex(keccak256(data)), viemKeccak(data))
-    }
-  })
-})
-
 describe('signatures', () => {
   test('read with names, spaces, tuples, arrays and modifiers; selectors equal viem', () => {
     const cases = [
@@ -257,36 +238,7 @@ describe('signatures', () => {
     }
   })
 
-  test("a JSON ABI's functions, with their selectors; anything else skipped", () => {
-    const functions = jsonFunctions([
-      {
-        inputs: [
-          {name: 'to', type: 'address'},
-          {name: 'amount', type: 'uint256'},
-        ],
-        name: 'transfer',
-        type: 'function',
-      },
-      {
-        inputs: [{components: [{name: 'a', type: 'uint8'}], name: 'p', type: 'tuple[]'}],
-        name: 'g',
-        type: 'function',
-      },
-      {inputs: [], name: 'Transfer', type: 'event'},
-      {inputs: [{type: 'uint7'}], name: 'bad', type: 'function'},
-      'nonsense',
-    ])
-    assert.deepEqual(
-      functions.map(fn => [fn.signature, fn.selector]),
-      [
-        ['transfer(address,uint256)', '0xa9059cbb'],
-        ['g((uint8)[])', toFunctionSelector('g((uint8)[])')],
-      ]
-    )
-    assert.deepEqual(jsonFunctions('https://example.com/abi.json'), [])
-  })
-
-  test("every built-in decoder's selector equals viem's", () => {
+  test("every built-in decoder's selector equals viem's (Keccak-256 by @noble/hashes)", () => {
     for (const builtin of BUILTINS) {
       assert.equal(builtin.fn.selector, toFunctionSelector(builtin.fn.signature), builtin.fn.signature)
     }
@@ -328,9 +280,8 @@ describe('decoding, against viem', () => {
           type: 'function',
         },
       ] as const
-      // Read from the same JSON ABI, so tuple components keep their names as viem's do.
-      const [fn] = jsonFunctions(abi)
-      assert.ok(fn)
+      const signature = `f(${params.map(param => canonicalType(param.type)).join(',')})`
+      const fn = {inputs: params, name: 'f', selector: toFunctionSelector(signature), signature}
       const args = params.map(param => randomValue(next, param.type))
       const data = encodeFunctionData({abi, args} as never)
       const theirs = decodeFunctionData({abi, data} as never) as {args?: readonly unknown[]}

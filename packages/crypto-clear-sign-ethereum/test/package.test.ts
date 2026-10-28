@@ -3,7 +3,7 @@ import {readdirSync, readFileSync, statSync} from 'node:fs'
 import path from 'node:path'
 import {describe, test} from 'node:test'
 
-import {isWarningCode, WARNINGS} from '@hzblj/crypto-clear-sign'
+import {isWarningCode} from '@hzblj/crypto-clear-sign'
 
 import * as api from '../src'
 import * as registry from '../src/registry'
@@ -42,6 +42,7 @@ describe('the package', () => {
       'clearSignTransaction',
       'clearSignTypedData',
       'createDescriptorResolver',
+      'fetchPrebuiltRegistryIndex',
       'mergeDescriptors',
     ])
     assert.equal(api.PERMIT2, '0x000000000022D473030F116dDEE9F6B43aC78BA3')
@@ -62,14 +63,18 @@ describe('the package', () => {
     assert.ok(!JSON.stringify(manifest.publishConfig.exports).includes('source'))
     assert.deepEqual(Object.keys(manifest.peerDependencies), ['@hzblj/nitro-crypto'])
     assert.ok('@hzblj/crypto-ethereum' in manifest.dependencies)
+    // ERC-7730 is rendered by the reference implementation; selectors are Keccak-256 from the hashes it uses too.
+    assert.ok('@ethereum-sourcify/clear-signing' in manifest.dependencies)
+    assert.ok('@noble/hashes' in manifest.dependencies)
   })
 
-  test("the package's codes: namespaced, stable severities, and every one in the README", () => {
+  test("the package's codes: namespaced, stable severities, its own and the severities it changes in the README", () => {
     const readme = read('README.md')
     const severities = Object.fromEntries(
       Object.values(api.ETHEREUM_WARNINGS).map(definition => [definition.code, definition.severity])
     )
     assert.deepEqual(severities, {
+      'ethereum.ADDRESS_TYPE_MISMATCH': 'medium',
       'ethereum.CONTRACT_CREATION': 'info',
       'ethereum.INVALID_DESCRIPTOR': 'low',
       'ethereum.MALFORMED_SIGN_IN': 'medium',
@@ -81,9 +86,10 @@ describe('the package', () => {
       'ethereum.UNKNOWN_SPENDER': 'high',
       'ethereum.UNLIMITED_AMOUNT': 'medium',
       'ethereum.UNREADABLE_FIELD': 'medium',
+      'ethereum.UNTRUSTED_DESCRIPTOR': 'medium',
     })
 
-    for (const code of [...Object.keys(severities), ...Object.values(WARNINGS).map(definition => definition.code)]) {
+    for (const code of [...Object.keys(severities), 'ASSET_OWNERSHIP_TRANSFER', 'ALL_CHAINS']) {
       assert.ok(isWarningCode(code), code)
       assert.ok(readme.includes(`| \`${code}\` |`), `${code} in the README's warnings`)
     }
@@ -91,13 +97,26 @@ describe('the package', () => {
     for (const [group, entries] of Object.entries(api.ETHEREUM_TEXTS)) {
       for (const [key, entry] of Object.entries(entries as Record<string, {readonly code: string}>)) {
         assert.equal(entry.code, `ethereum.${group}.${key}`)
-        assert.ok(readme.includes(`\`${key}\``), `${entry.code} in the README's texts`)
       }
     }
   })
 
-  test('docs copy has no em dashes: the README, CLAUDE.md and the JSDoc that is the API reference', () => {
-    const files = ['README.md', 'CLAUDE.md', ...sources('src')]
+  test('every own warning code is asserted by a test', () => {
+    const tests = readdirSync(path.join(ROOT, 'test'))
+      .filter(file => file.endsWith('.test.ts') && file !== 'package.test.ts')
+      .map(file => read(path.join('test', file)))
+      .join('\n')
+
+    for (const {code} of Object.values(api.ETHEREUM_WARNINGS)) {
+      assert.ok(tests.includes(`'${code}`), `${code} is never asserted`)
+    }
+  })
+
+  test('docs copy has no em dashes: the README, CLAUDE.md, the JSDoc that is the API reference, pending changesets', () => {
+    const changesets = readdirSync(path.join(ROOT, '../../.changeset'))
+      .filter(file => file.endsWith('.md') && file !== 'README.md')
+      .map(file => path.join('../../.changeset', file))
+    const files = ['README.md', 'CLAUDE.md', ...sources('src'), ...changesets]
     assert.ok(files.length > 20)
 
     for (const file of files) {

@@ -1353,6 +1353,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@ethereum-sourcify/clear-signing@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@ethereum-sourcify/clear-signing@npm:0.3.0"
+  dependencies:
+    "@noble/curves": "npm:^1.9.7"
+    "@noble/hashes": "npm:^1.7.1"
+  checksum: 10c0/688bdcdc25eff72e9d188cf1798fbeb562a26be45371f16d35d9c879fa17351f4f4896a757318052e83e205ac955c0f84f145c39bc0d10b86564ee52eeb4b790
+  languageName: node
+  linkType: hard
+
 "@expo-google-fonts/material-symbols@npm:^0.4.1":
   version: 0.4.51
   resolution: "@expo-google-fonts/material-symbols@npm:0.4.51"
@@ -1954,9 +1964,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@hzblj/crypto-clear-sign-ethereum@workspace:packages/crypto-clear-sign-ethereum"
   dependencies:
+    "@ethereum-sourcify/clear-signing": "npm:^0.3.0"
     "@hzblj/crypto-clear-sign": "workspace:^"
     "@hzblj/crypto-ethereum": "npm:^0.3.0"
     "@hzblj/nitro-crypto": "npm:^0.1.5"
+    "@noble/hashes": "npm:^1.8.0"
     "@types/node": "npm:^22.19.0"
     tsx: "npm:^4.23.15"
     typescript: "npm:~7.0.2"
@@ -2383,7 +2395,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@noble/curves@npm:~1.9.0":
+"@noble/curves@npm:^1.9.7, @noble/curves@npm:~1.9.0":
   version: 1.9.7
   resolution: "@noble/curves@npm:1.9.7"
   dependencies:
@@ -2392,7 +2404,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@noble/hashes@npm:1.8.0, @noble/hashes@npm:^1.8.0, @noble/hashes@npm:~1.8.0":
+"@noble/hashes@npm:1.8.0, @noble/hashes@npm:^1.7.1, @noble/hashes@npm:^1.8.0, @noble/hashes@npm:~1.8.0":
   version: 1.8.0
   resolution: "@noble/hashes@npm:1.8.0"
   checksum: 10c0/06a0b52c81a6fa7f04d67762e08b2c476a00285858150caeaaff4037356dd5e119f45b2a530f638b77a5eeca013168ec1b655db41bae3236cb2e9d511484fc77
