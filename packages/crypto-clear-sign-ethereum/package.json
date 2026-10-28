@@ -1,6 +1,6 @@
 {
   "name": "@hzblj/crypto-clear-sign-ethereum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Ethereum and EVM clear signing for @hzblj/crypto-clear-sign: transactions of every type, EIP-712 typed data, EIP-191 messages with Sign-In with Ethereum, and EIP-7702 authorizations, read through the chain client of @hzblj/crypto-ethereum into the shared display model, with built-in decoders for the standard calls and ERC-7730 descriptors rendered by @ethereum-sourcify/clear-signing (and a bundled set of registry descriptors). No UI.",
   "author": "Jan Blazej",
   "license": "MIT",

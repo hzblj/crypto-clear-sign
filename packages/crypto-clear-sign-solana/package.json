@@ -1,6 +1,6 @@
 {
   "name": "@hzblj/crypto-clear-sign-solana",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Solana clear signing for @hzblj/crypto-clear-sign: legacy and v0 transactions, messages and off-chain messages, read through the chain client of @hzblj/crypto-solana into the shared display model, with IDLs from a resolver. No UI.",
   "author": "Jan Blazej",
   "license": "MIT",

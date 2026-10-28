@@ -1,5 +1,14 @@
 # @hzblj/crypto-clear-sign-solana
 
+## 0.1.1
+
+### Patch Changes
+
+- [`461517c`](https://github.com/hzblj/crypto-clear-sign/commit/461517c7a9c28f0020cad85b40cdcf111362fa58) Thanks [@hzblj](https://github.com/hzblj)! - Shorter READMEs: install, a quick start, the API, the warning codes, what is not supported, and links.
+
+- Updated dependencies [[`461517c`](https://github.com/hzblj/crypto-clear-sign/commit/461517c7a9c28f0020cad85b40cdcf111362fa58)]:
+  - @hzblj/crypto-clear-sign@0.1.1
+
 ## 0.1.0
 
 ### Minor Changes
