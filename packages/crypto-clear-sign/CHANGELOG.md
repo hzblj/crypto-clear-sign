@@ -1,5 +1,11 @@
 # @hzblj/crypto-clear-sign
 
+## 0.1.2
+
+### Patch Changes
+
+- [`84c37c8`](https://github.com/hzblj/crypto-clear-sign/commit/84c37c8efaf6df3bb45d1564a6a26bed5c94c014) Thanks [@hzblj](https://github.com/hzblj)! - The README shows the example app on iOS and Android.
+
 ## 0.1.1
 
 ### Patch Changes
