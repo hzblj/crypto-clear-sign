@@ -6,6 +6,12 @@
 The display model of clear signing: what a wallet is about to sign, as an intent, fields, actions, warnings with
 stable codes and a computed risk, for any UI to render. No dependencies, no UI, no network.
 
+<p>
+  <img alt="The example's Ethereum gallery: each signing request with its risk" height="560" src="https://raw.githubusercontent.com/hzblj/crypto-clear-sign/main/media/ios-gallery.png" />
+  <img alt="An unlimited approval's review: critical, the warning pointing at the amount and the spender" height="560" src="https://raw.githubusercontent.com/hzblj/crypto-clear-sign/main/media/ios-review.png" />
+  <img alt="The same review on Android" height="560" src="https://raw.githubusercontent.com/hzblj/crypto-clear-sign/main/media/android-review.png" />
+</p>
+
 ## Install
 
 ```sh

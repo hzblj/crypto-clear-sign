@@ -42,13 +42,11 @@ signing requests on Ethereum, Solana and Bitcoin; nothing is signed or broadcast
 review components in `apps/example/src/components/clear-signing` (`ClearSigningView`, `RiskBadge`, `WarningList`,
 `FieldRow`, `ActionTree`) are written to be copied into a wallet.
 
-<!-- Screenshots of the example, to be added: uncomment once media/ has them.
 <p>
   <img alt="The Ethereum gallery: each signing request with its risk" height="560" src="media/ios-gallery.png" />
   <img alt="An unlimited approval's review: critical, the warning pointing at the amount and the spender" height="560" src="media/ios-review.png" />
   <img alt="The same review on Android" height="560" src="media/android-review.png" />
 </p>
--->
 
 ## This repository
 
